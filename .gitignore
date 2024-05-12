@@ -1,0 +1,10 @@
+.cache
+.cmake
+build
+CMakeFiles
+game.xcodeproj
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+main
+Makefile
