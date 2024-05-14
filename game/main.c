@@ -7,12 +7,12 @@
 
 #define SOKOL_IMPL
 #define SOKOL_GLCORE33
+#define STB_IMAGE_IMPLEMENTATION
 
 #include "sokol_gfx.h"
 #include "sokol_log.h"
 #include "glfw_glue.h"
-
-#define STB_IMAGE_IMPLEMENTATION
+#include "file.h"
 
 #include "stb_image.h"
 
@@ -38,8 +38,24 @@ typedef struct {
     int y;
 } position_coord;
 
+const char *filenames[] = {
+        "assets/w_pawn_1x_ns.png",
+        "assets/w_rook_1x_ns.png",
+        "assets/w_bishop_1x_ns.png",
+        "assets/w_king_1x_ns.png",
+        "assets/w_knight_1x_ns.png",
+        "assets/w_queen_1x_ns.png",
+        "assets/b_pawn_1x_ns.png",
+        "assets/b_rook_1x_ns.png",
+        "assets/b_bishop_1x_ns.png",
+        "assets/b_king_1x_ns.png",
+        "assets/b_knight_1x_ns.png",
+        "assets/b_queen_1x_ns.png",
+};
+
 typedef struct {
-    int figure_type; // 0pawn 1 rook
+    // type is index in textures array
+    int figure_type;
     bool is_selected;
     position_coord position;
     bool is_black;
@@ -54,20 +70,24 @@ typedef struct {
 typedef struct {
     int xCell;
     int yCell;
-} cursorPosition;
-
-typedef struct {
-    vec2 position;
-    int is_hovered;
-} uniform_params;
+} cursor_position;
 
 typedef struct {
     int is_hovered;
-} ps_uniform_params;
+} squares_uniform_params;
+
+typedef struct {
+    vec2 pos_offset;
+    int is_hovered;
+    int is_selected;
+    float scale;
+} figures_uniform_params;
 
 typedef struct {
     vertex vertices[64][4];
 } boardResult;
+
+chess_square squares[8][8] = {0};
 
 boardResult fillBoard() {
     boardResult result;
@@ -89,136 +109,95 @@ boardResult fillBoard() {
             result.vertices[i * 8 + j][2].position = (vec3) {.x = endX, .y = endY, .z = -1.0f};
             result.vertices[i * 8 + j][3].position = (vec3) {.x = startX, .y = endY, .z = -1.0f};
 
-            if (isEvenRow) {
-                if (isEvenColumn) {
-                    result.vertices[i * 8 + j][0].color =
-                            (vec4) {.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][1].color =
-                            (vec4) {.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][2].color =
-                            (vec4) {.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][3].color =
-                            (vec4) {.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f};
-                } else {
-                    result.vertices[i * 8 + j][0].color =
-                            (vec4) {.x = 0.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][1].color =
-                            (vec4) {.x = 0.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][2].color =
-                            (vec4) {.x = 0.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][3].color =
-                            (vec4) {.x = 0.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f};
-                }
-            } else {
-                if (isEvenColumn) {
-                    result.vertices[i * 8 + j][0].color =
-                            (vec4) {.x = 0.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][1].color =
-                            (vec4) {.x = 0.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][2].color =
-                            (vec4) {.x = 0.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][3].color =
-                            (vec4) {.x = 0.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f};
-                } else {
-                    result.vertices[i * 8 + j][0].color =
-                            (vec4) {.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][1].color =
-                            (vec4) {.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][2].color =
-                            (vec4) {.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f};
-                    result.vertices[i * 8 + j][3].color =
-                            (vec4) {.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f};
-                }
+            vec4 color = {0};
+            if ((isEvenRow && isEvenColumn) || !isEvenRow && !isEvenColumn) {
+                color.x = color.y = color.z = color.r = 1.0f;
             }
+
+            result.vertices[i*8+j][0].color = color;
+            result.vertices[i*8+j][1].color = color;
+            result.vertices[i*8+j][2].color = color;
+            result.vertices[i*8+j][3].color = color;
         }
     }
     return result;
 }
 
 sg_pipeline getBoardPipleine() {
+    const char *vs_shader_content = get_file_content("game/shaders/square_vs.glsl");
+    const char *ps_shader_content = get_file_content("game/shaders/square_ps.glsl");
+
     // create shader, note the combined-image-sampler description
     sg_shader shd = sg_make_shader(&(sg_shader_desc) {
-            .vs =
-                    {
-                            .source = "#version 330\n"
-                                      "layout(location = 0) in vec4 position;\n"
-                                      "layout(location = 1) in vec4 color0;\n"
-                                      "out vec4 color;\n"
-                                      "void main() {\n"
-                                      "  gl_Position = position;\n"
-                                      "  color = color0;\n"
-                                      "}\n",
-                    },
-            .fs = {.source = "#version 330\n"
-                             "out vec4 frag_color;\n"
-                             "in vec4 color;\n"
-                             "void main() {\n"
-                             "  frag_color = color;\n"
-                             "}\n"}});
+        .vs = {
+            .source = vs_shader_content,
+            .uniform_blocks[0] = {
+                .size = sizeof(squares_uniform_params),
+                .uniforms = { {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT} },
+            },
+        },
+        .fs = {
+            .source = ps_shader_content,
+            .uniform_blocks[0] = {
+                .size = sizeof(squares_uniform_params),
+                .uniforms = { {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT} },
+            },
+        }
+    });
 
     // create pipeline object
     return sg_make_pipeline(&(sg_pipeline_desc) {
-            .layout = {
-                    .attrs = {
-                            {.format = SG_VERTEXFORMAT_FLOAT3},
-                            {.format = SG_VERTEXFORMAT_FLOAT4},
-                    }
-            },
-            .shader = shd,
-            .index_type = SG_INDEXTYPE_UINT16,
-            .depth = {.compare = SG_COMPAREFUNC_LESS_EQUAL, .write_enabled = true},
-            .cull_mode = SG_CULLMODE_BACK});
+        .layout = {
+            .attrs = {
+                {.format = SG_VERTEXFORMAT_FLOAT3},
+                {.format = SG_VERTEXFORMAT_FLOAT4},
+            }
+        },
+        .shader = shd,
+        .index_type = SG_INDEXTYPE_UINT16,
+        .depth = {.compare = SG_COMPAREFUNC_LESS_EQUAL, .write_enabled = true},
+        .cull_mode = SG_CULLMODE_BACK});
 }
 
-char *get_file_content(char *filename) {
-    char *buffer = 0;
-    long length;
-    FILE *f = fopen(filename, "rb");
 
-    if (f) {
-        fseek(f, 0, SEEK_END);
-        length = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        buffer = malloc(length);
-        if (buffer) {
-            fread(buffer, 1, length, f);
-        }
-        fclose(f);
-    }
-
-    return buffer;
-}
 
 sg_pipeline getFiguresPipleine() {
-    const char *vs_shader_content = get_file_content("game/shaders/default_vs.glsl");
-    const char *ps_shader_content = get_file_content("game/shaders/default_ps.glsl");
-    printf("%s\n", vs_shader_content);
-    printf("%s\n", ps_shader_content);
+    const char *vs_shader_content = get_file_content("game/shaders/figures_vs.glsl");
+    const char *ps_shader_content = get_file_content("game/shaders/figures_ps.glsl");
+
     // create shader, note the combined-image-sampler description
     sg_shader shd = sg_make_shader(&(sg_shader_desc) {
-            .vs = {
-                    .uniform_blocks[0] = {
-                            .size = sizeof(uniform_params),
-                            .uniforms = {
-                                    {.name = "posOffset", .type = SG_UNIFORMTYPE_FLOAT2},
-                                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT}
-                            },
-                    },
-                    .source = vs_shader_content,
+        .vs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(figures_uniform_params),
+                .uniforms = {
+                    {.name = "pos_offset", .type = SG_UNIFORMTYPE_FLOAT2},
+                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
+                    {.name = "is_selected", .type = SG_UNIFORMTYPE_INT},
+                    {.name = "scale", .type = SG_UNIFORMTYPE_FLOAT}
+                },
             },
-            .fs = {
-                    .uniform_blocks[0] = {
-                            .size = sizeof(ps_uniform_params),
-                            .uniforms = {
-                                {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT}
-                            }
-                    },
-                    .images[0].used = true,
-                    .samplers[0].used = true,
-                    .image_sampler_pairs[0] = {.used = true, .glsl_name = "tex", .image_slot = 0, .sampler_slot = 0},
-                    .source = ps_shader_content
-            }
+            .source = vs_shader_content,
+        },
+        .fs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(figures_uniform_params),
+                .uniforms = {
+                    {.name = "pos_offset", .type = SG_UNIFORMTYPE_FLOAT2},
+                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
+                    {.name = "is_selected", .type = SG_UNIFORMTYPE_INT},
+                    {.name = "scale", .type = SG_UNIFORMTYPE_FLOAT}
+                }
+            },
+            .images[0].used = true,
+            .samplers[0].used = true,
+            .image_sampler_pairs[0] = {.used = true, .glsl_name = "tex", .image_slot = 0, .sampler_slot = 0},
+            .source = ps_shader_content
+        }
     });
+
+    free(vs_shader_content);
+    free(ps_shader_content);
 
     // create pipeline object
     return sg_make_pipeline(&(sg_pipeline_desc) {
@@ -231,7 +210,7 @@ sg_pipeline getFiguresPipleine() {
             .cull_mode = SG_CULLMODE_BACK});
 }
 
-cursorPosition cursorPos = {};
+cursor_position cursorPos = {};
 
 static void cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
     if (xpos < 0 || ypos < 0) return;
@@ -252,32 +231,21 @@ static void cursor_position_callback(GLFWwindow *window, double xpos, double ypo
     cursorPos.yCell = yCell;
 }
 
-const char *filenames[] = {
-        "w_pawn_1x_ns.png",
-        "w_rook_1x_ns.png",
-        "w_bishop_1x_ns.png",
-        "w_king_1x_ns.png",
-        "w_knight_1x_ns.png",
-        "w_queen_1x_ns.png",
-        "b_pawn_1x_ns.png",
-        "b_rook_1x_ns.png",
-        "b_bishop_1x_ns.png",
-        "b_king_1x_ns.png",
-        "b_knight_1x_ns.png",
-        "b_queen_1x_ns.png",
-};
+
 
 sg_image *textures;
-figure *figures;
-
-figure *selected_figure;
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        for (int i = 0; i < 32; i++) {
-            if (figures[i].position.x == cursorPos.xCell && figures[i].position.y == cursorPos.yCell) {
-                selected_figure = &figures[i];
+        for (int i = 0; i < 8; i++) {
+            for (int j = 0; j < 8; j++) {
+                if (squares[i][j].figure == NULL) continue;
+                squares[i][j].figure->is_selected = 0;
             }
+        }
+        if (squares[cursorPos.xCell][cursorPos.yCell].figure != NULL) {
+            squares[cursorPos.xCell][cursorPos.yCell].figure->is_selected = 1;
+            //todo now i need to calculate possible positions
         }
     }
 }
@@ -317,37 +285,52 @@ int main() {
         textures[i].id = img.id;
     }
 
-    figures = malloc(sizeof(figure) * 32);
-    for (int i = 0; i < 8; i++) {
-        figures[i] = (figure) {.figure_type = 0, .position = (position_coord) {.x = i, .y = 1}};
-    }
-    figures[8] = (figure) {.figure_type = 1, .position = (position_coord) {.x = 0, .y = 0}};
-    figures[9] = (figure) {.figure_type = 1, .position = (position_coord) {.x = 7, .y = 0}};
-    figures[10] = (figure) {.figure_type = 4, .position = (position_coord) {.x = 1, .y = 0}};
-    figures[11] = (figure) {.figure_type = 4, .position = (position_coord) {.x = 6, .y = 0}};
-    figures[12] = (figure) {.figure_type = 2, .position = (position_coord) {.x = 2, .y = 0}};
-    figures[13] = (figure) {.figure_type = 2, .position = (position_coord) {.x = 5, .y = 0}};
-    figures[14] = (figure) {.figure_type = 3, .position = (position_coord) {.x = 3, .y = 0}};
-    figures[15] = (figure) {.figure_type = 5, .position = (position_coord) {.x = 4, .y = 0}};
-
-    for (int i = 0; i < 8; i++) {
-        figures[i + 16] = (figure) {.figure_type = 0, .position = (position_coord) {.x = i, .y = 6}, .is_black = true};
-    }
-    figures[24] = (figure) {.figure_type = 1, .position = (position_coord) {.x = 0, .y = 7}, .is_black = true};
-    figures[25] = (figure) {.figure_type = 1, .position = (position_coord) {.x = 7, .y = 7}, .is_black = true};
-    figures[26] = (figure) {.figure_type = 4, .position = (position_coord) {.x = 1, .y = 7}, .is_black = true};
-    figures[27] = (figure) {.figure_type = 4, .position = (position_coord) {.x = 6, .y = 7}, .is_black = true};
-    figures[28] = (figure) {.figure_type = 2, .position = (position_coord) {.x = 2, .y = 7}, .is_black = true};
-    figures[29] = (figure) {.figure_type = 2, .position = (position_coord) {.x = 5, .y = 7}, .is_black = true};
-    figures[30] = (figure) {.figure_type = 3, .position = (position_coord) {.x = 3, .y = 7}, .is_black = true};
-    figures[31] = (figure) {.figure_type = 5, .position = (position_coord) {.x = 4, .y = 7}, .is_black = true};
     boardResult result = fillBoard();
 
-    chess_square squares[8][8];
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
-            squares[i][j].vertex_buffer = sg_make_buffer(&(sg_buffer_desc) {.type = SG_BUFFERTYPE_VERTEXBUFFER, .data = SG_RANGE(result.vertices[i * 8 + j])});
+            squares[i][j].vertex_buffer = sg_make_buffer(&(sg_buffer_desc) { .type = SG_BUFFERTYPE_VERTEXBUFFER, .data = SG_RANGE(result.vertices[i * 8 + j]) });
         }
+    }
+
+    for (int i =0; i < 8; i++) {
+        squares[i][0].figure = malloc(sizeof(figure));
+    }
+
+    squares[0][0].figure->figure_type = 1;
+    squares[7][0].figure->figure_type = 1;
+    squares[1][0].figure->figure_type = 4;
+    squares[6][0].figure->figure_type = 4;
+    squares[2][0].figure->figure_type = 2;
+    squares[5][0].figure->figure_type = 2;
+    squares[3][0].figure->figure_type = 3;
+    squares[4][0].figure->figure_type = 5;
+
+    for (int i = 0; i < 8; i++) {
+        figure *f = malloc(sizeof(figure));
+        f->figure_type = 0;
+        squares[i][1].figure = f;
+    }
+
+    for (int i =0; i < 8; i++) {
+        squares[i][7].figure = malloc(sizeof(figure));
+        squares[i][7].figure->is_black = 1;
+    }
+
+    squares[0][7].figure->figure_type = 1;
+    squares[7][7].figure->figure_type = 1;
+    squares[1][7].figure->figure_type = 4;
+    squares[6][7].figure->figure_type = 4;
+    squares[2][7].figure->figure_type = 2;
+    squares[5][7].figure->figure_type = 2;
+    squares[3][7].figure->figure_type = 3;
+    squares[4][7].figure->figure_type = 5;
+
+    for (int i = 0; i < 8; i++) {
+        figure *f = malloc(sizeof(figure));
+        f->figure_type = 0;
+        f->is_black = 1;
+        squares[i][6].figure = f;
     }
 
     float startX = 0.0f;
@@ -355,7 +338,6 @@ int main() {
     float endX = startX + 0.25f;
     float endY = startY + 0.25f;
 
-    // cube vertex buffer
     float vertices[] = {
             // pos                 color                  texcoord
             startX, startY, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
@@ -371,82 +353,91 @@ int main() {
 
     // create a sampler object
     sg_sampler smp = sg_make_sampler(&(sg_sampler_desc) {
-            .min_filter = SG_FILTER_NEAREST,
-            .mag_filter = SG_FILTER_NEAREST,
+        .min_filter = SG_FILTER_NEAREST,
+        .mag_filter = SG_FILTER_NEAREST,
     });
 
     // create an index buffer for the cube
     uint16_t indices[] = {2, 1, 0, 3, 2, 0};
-    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc) {
-            .type = SG_BUFFERTYPE_INDEXBUFFER, .data = SG_RANGE(indices)});
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc) { .type = SG_BUFFERTYPE_INDEXBUFFER, .data = SG_RANGE(indices) });
 
-    sg_pipeline boardPipleine = getBoardPipleine();
-    sg_pipeline figuresPipeline = getFiguresPipleine();
+    sg_pipeline board_pipeline = getBoardPipleine();
+    sg_pipeline figures_pipeline = getFiguresPipleine();
 
     // default pass action
     sg_pass_action pass_action = {0};
 
-
-    figure *figures_to_draw[32];
+    figure* figures_to_draw[64];
     while (!glfwWindowShouldClose(glfw_window())) {
         memset(figures_to_draw, 0, sizeof(figures_to_draw));
+
         for (int i = 0; i < 8; i++) {
             for (int j = 0; j < 8; j++) {
                 squares[i][j].is_hovered = false;
-                if (squares[i][j].figure != NULL) {
-                    //todo: add figures to draw after figures will be added in cells
+                if (squares[i][j].figure == NULL) {
+                    continue;
                 }
+
+                figure *f = squares[i][j].figure;
+
+                f->position.x = i;
+                f->position.y = j;
+
+                figures_to_draw[i*8+j] = f;
             }
         }
-        squares[cursorPos.xCell][cursorPos.yCell].is_hovered = true;
+
+        squares[7-cursorPos.yCell][cursorPos.xCell].is_hovered = true;
 
         sg_begin_pass(&(sg_pass) {.action = pass_action, .swapchain = glfw_swapchain()});
+        sg_apply_pipeline(board_pipeline);
 
-        sg_apply_pipeline(boardPipleine);
+        squares_uniform_params s_params = {0};
         for (int i = 0; i < 8; i++) {
             for (int j = 0; j < 8; j++) {
-                sg_apply_bindings(&(sg_bindings) {
-                        .vertex_buffers = squares[i][j].vertex_buffer,
-                        .index_buffer = ibuf,
-                });
+                s_params.is_hovered = squares[i][j].is_hovered;
+                sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range) {.ptr = &s_params,.size = sizeof(s_params)});
+                sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range) {.ptr = &s_params,.size = sizeof(s_params)});
+                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range) {.ptr = &s_params,.size = sizeof(s_params)});
+                sg_apply_bindings(&(sg_bindings) { .vertex_buffers = squares[i][j].vertex_buffer, .index_buffer = ibuf });
                 sg_draw(0, 6, 1);
             }
         }
+        sg_apply_pipeline(figures_pipeline);
 
-        sg_apply_pipeline(figuresPipeline);
-
-        uniform_params params;
-        ps_uniform_params ps_params;
-        for (int i = 0; i < 32; i++) {
-            if (&figures[i] == selected_figure) {
-                printf("some figure is selected pos x %d y %d\n", selected_figure->position.x,
-                       selected_figure->position.y);
+        figures_uniform_params params;
+        for (int i = 0; i < 64; i++) {
+            figure *fig = *(figures_to_draw + i);
+            if (fig == NULL) {
+                continue;
             }
-            params.position.x = -(1.0f - 2.0f * figures[i].position.x * 0.125f);
-            params.position.y = (1.0f - 2.0f * figures[i].position.y * 0.125f) - 0.25f;
 
-            ps_params.is_hovered = 1;
-            sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range) {
-                    .ptr = &ps_params,
-                    .size = sizeof(ps_params)
-            });
-            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range) {
-                    .ptr = &params,
-                    .size = sizeof(params)
-            });
+            params.is_selected = 0;
+            params.scale = 0;
+
+            if (fig->is_selected == 1) {
+                params.is_selected = 1;
+                params.scale = 1.02f;
+            }
+
+            params.pos_offset.x = -(1.0f - 2.0f * fig->position.x * 0.125f);
+            params.pos_offset.y = (1.0f - 2.0f * fig->position.y * 0.125f) - 0.25f;
+
+            params.is_hovered = 1;
+            sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range) {.ptr = &params,.size = sizeof(params)});
+            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range) {.ptr = &params,.size = sizeof(params)});
 
             int offset = 0;
-            if (figures[i].is_black) {
+            if (fig->is_black) {
                 offset = offset + 6;
             }
-            sg_image figure_image = textures[figures[i].figure_type + offset];
+            sg_image figure_image = textures[fig->figure_type + offset];
 
             sg_apply_bindings(&(sg_bindings) {
-                    .vertex_buffers = vbuf,
-                    .index_buffer = ibuf,
-                    .fs = {.images[0] = figure_image, .samplers[0] = smp}
+                .vertex_buffers = vbuf,
+                .index_buffer = ibuf,
+                .fs = {.images[0] = figure_image, .samplers[0] = smp }
             });
-
             sg_draw(0, 6, 1);
         }
 
