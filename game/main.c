@@ -34,6 +34,11 @@ typedef struct {
 } vertex;
 
 typedef struct {
+    vec2 position;
+    vec4 color;
+} line_vertex;
+
+typedef struct {
     int x;
     int y;
 } position_coord;
@@ -65,12 +70,14 @@ typedef struct {
     sg_buffer vertex_buffer;
     bool is_hovered;
     bool possible_move;
+    bool attack_move;
     figure *figure;
 } chess_square;
 
 typedef struct {
     int is_hovered;
     int possible_move;
+    int attack_move;
 } squares_uniform_params;
 
 typedef struct {
@@ -86,8 +93,9 @@ typedef struct {
 
 
 boardResult fill_board();
-sg_pipeline get_board_pipleine();
-sg_pipeline get_figures_pipleine();
+sg_pipeline get_board_pipeline();
+sg_pipeline get_figures_pipeline();
+sg_pipeline get_lines_pipeline();
 
 void clear_squares_possible_move();
 
@@ -164,6 +172,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
             if (selected_figure == NULL) {
                 return;
             }
+
             squares[selected_pos.y][selected_pos.x].figure = NULL;
             squares[cursor_pos.y][cursor_pos.x].figure = selected_figure;
             selected_figure->is_selected = false;
@@ -226,7 +235,7 @@ int main() {
     }
 
     for (int i =0; i < 8; i++) {
-        squares[0][i].figure = malloc(sizeof(figure));
+        squares[0][i].figure = calloc(1, sizeof(figure));
     }
 
     squares[0][0].figure->figure_type = 1;
@@ -239,13 +248,12 @@ int main() {
     squares[0][4].figure->figure_type = 5;
 
     for (int i = 0; i < 8; i++) {
-        figure *f = malloc(sizeof(figure));
-        f->figure_type = 0;
+        figure *f = calloc(1, sizeof(figure));
         squares[1][i].figure = f;
     }
 
     for (int i =0; i < 8; i++) {
-        squares[7][i].figure = malloc(sizeof(figure));
+        squares[7][i].figure = calloc(1, sizeof(figure));
         squares[7][i].figure->is_black = 1;
     }
 
@@ -259,8 +267,7 @@ int main() {
     squares[7][4].figure->figure_type = 5;
 
     for (int i = 0; i < 8; i++) {
-        figure *f = malloc(sizeof(figure));
-        f->figure_type = 0;
+        figure *f = calloc(1, sizeof(figure));
         f->is_black = 1;
         squares[6][i].figure = f;
     }
@@ -293,8 +300,18 @@ int main() {
     uint16_t indices[] = {2, 1, 0, 3, 2, 0};
     sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc) { .type = SG_BUFFERTYPE_INDEXBUFFER, .data = SG_RANGE(indices) });
 
-    sg_pipeline board_pipeline = get_board_pipleine();
-    sg_pipeline figures_pipeline = get_figures_pipleine();
+    sg_pipeline board_pipeline = get_board_pipeline();
+    sg_pipeline figures_pipeline = get_figures_pipeline();
+    sg_pipeline lines_pipeline = get_lines_pipeline();
+
+    line_vertex  line_vertices[] = {
+        {.color = (vec4){.x = 1.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f}, .position = (vec2){.x = -1.0f, .y = -1.0f} },
+        {.color = (vec4){.x = 1.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f}, .position = (vec2){.x = 1.0f, .y = 1.0f} }
+    };
+    sg_buffer lines_b = sg_make_buffer(&(sg_buffer_desc){
+       .type = SG_BUFFERTYPE_VERTEXBUFFER,
+       .data = SG_RANGE(line_vertices)
+    });
 
     // default pass action
     sg_pass_action pass_action = {0};
@@ -331,6 +348,8 @@ int main() {
             for (int j = 0; j < 8; j++) {
                 s_params.is_hovered = squares[i][j].is_hovered;
                 s_params.possible_move = squares[i][j].possible_move;
+                s_params.attack_move = squares[i][j].attack_move;
+
                 sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range) {.ptr = &s_params,.size = sizeof(s_params)});
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range) {.ptr = &s_params,.size = sizeof(s_params)});
                 sg_apply_bindings(&(sg_bindings) { .vertex_buffers = squares[i][j].vertex_buffer, .index_buffer = ibuf });
@@ -374,6 +393,14 @@ int main() {
             sg_draw(0, 6, 1);
         }
 
+
+        sg_apply_pipeline(lines_pipeline);
+        sg_apply_bindings(&(sg_bindings){
+            .vertex_buffers = lines_b
+        });
+        sg_update_buffer()
+        sg_draw(0, 2, 1);
+
         sg_end_pass();
 
         sg_commit();
@@ -384,95 +411,125 @@ int main() {
     glfwTerminate();
 }
 
-sg_pipeline get_board_pipleine() {
-    const char *vs_shader_content = get_file_content("game/shaders/square_vs.glsl");
-    const char *ps_shader_content = get_file_content("game/shaders/square_ps.glsl");
+sg_pipeline get_board_pipeline() {
+    char *vs_shader_content = get_file_content("game/shaders/square_vs.glsl");
+    char *ps_shader_content = get_file_content("game/shaders/square_ps.glsl");
 
     // create shader, note the combined-image-sampler description
     sg_shader shd = sg_make_shader(&(sg_shader_desc) {
-            .vs = {
-                    .source = vs_shader_content,
-                    .uniform_blocks[0] = {
-                            .size = sizeof(squares_uniform_params),
-                            .uniforms = {
-                                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
-                                    {.name = "possible_move", .type = SG_UNIFORMTYPE_INT},
-                            },
-                    },
+        .vs = {
+            .source = vs_shader_content,
+            .uniform_blocks[0] = {
+                .size = sizeof(squares_uniform_params),
+                .uniforms = {
+                {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
+                {.name = "possible_move", .type = SG_UNIFORMTYPE_INT},
+                {.name = "attack_move", .type = SG_UNIFORMTYPE_INT},
+                },
             },
-            .fs = {
-                    .source = ps_shader_content,
-                    .uniform_blocks[0] = {
-                            .size = sizeof(squares_uniform_params),
-                            .uniforms = {
-                                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
-                                    {.name = "possible_move", .type = SG_UNIFORMTYPE_INT},
-                            },
-                    },
-            }
+        },
+        .fs = {
+            .source = ps_shader_content,
+            .uniform_blocks[0] = {
+                .size = sizeof(squares_uniform_params),
+                .uniforms = {
+                {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
+                {.name = "possible_move", .type = SG_UNIFORMTYPE_INT},
+                {.name = "attack_move", .type = SG_UNIFORMTYPE_INT},
+                },
+            },
+        }
     });
 
     // create pipeline object
     return sg_make_pipeline(&(sg_pipeline_desc) {
-            .layout = {
-                    .attrs = {
-                            {.format = SG_VERTEXFORMAT_FLOAT3},
-                            {.format = SG_VERTEXFORMAT_FLOAT4},
-                    }
-            },
-            .shader = shd,
-            .index_type = SG_INDEXTYPE_UINT16,
-            .depth = {.compare = SG_COMPAREFUNC_LESS_EQUAL, .write_enabled = true},
-            .cull_mode = SG_CULLMODE_BACK});
+        .layout = {
+            .attrs = {
+            {.format = SG_VERTEXFORMAT_FLOAT3},
+            {.format = SG_VERTEXFORMAT_FLOAT4},
+            }
+        },
+        .shader = shd,
+        .index_type = SG_INDEXTYPE_UINT16,
+        .depth = {.compare = SG_COMPAREFUNC_LESS_EQUAL, .write_enabled = true},
+        .cull_mode = SG_CULLMODE_BACK
+    });
 }
 
-sg_pipeline get_figures_pipleine() {
-    const char *vs_shader_content = get_file_content("game/shaders/figures_vs.glsl");
-    const char *ps_shader_content = get_file_content("game/shaders/figures_ps.glsl");
+sg_pipeline get_lines_pipeline() {
+    char *vs_shader_content = get_file_content("game/shaders/line_vs.glsl");
+    char *ps_shader_content = get_file_content("game/shaders/line_ps.glsl");
 
     // create shader, note the combined-image-sampler description
     sg_shader shd = sg_make_shader(&(sg_shader_desc) {
-            .vs = {
-                    .uniform_blocks[0] = {
-                            .size = sizeof(figures_uniform_params),
-                            .uniforms = {
-                                    {.name = "pos_offset", .type = SG_UNIFORMTYPE_FLOAT2},
-                                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
-                                    {.name = "is_selected", .type = SG_UNIFORMTYPE_INT},
-                                    {.name = "scale", .type = SG_UNIFORMTYPE_FLOAT}
-                            },
-                    },
-                    .source = vs_shader_content,
-            },
-            .fs = {
-                    .uniform_blocks[0] = {
-                            .size = sizeof(figures_uniform_params),
-                            .uniforms = {
-                                    {.name = "pos_offset", .type = SG_UNIFORMTYPE_FLOAT2},
-                                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
-                                    {.name = "is_selected", .type = SG_UNIFORMTYPE_INT},
-                                    {.name = "scale", .type = SG_UNIFORMTYPE_FLOAT}
-                            }
-                    },
-                    .images[0].used = true,
-                    .samplers[0].used = true,
-                    .image_sampler_pairs[0] = {.used = true, .glsl_name = "tex", .image_slot = 0, .sampler_slot = 0},
-                    .source = ps_shader_content
-            }
+        .vs = { .source = vs_shader_content },
+        .fs = { .source = ps_shader_content }
     });
-
-    free(vs_shader_content);
-    free(ps_shader_content);
 
     // create pipeline object
     return sg_make_pipeline(&(sg_pipeline_desc) {
-            .layout = {.attrs = {[0] = {.format = SG_VERTEXFORMAT_FLOAT3},
-                    [1] = {.format = SG_VERTEXFORMAT_FLOAT4},
-                    [2] = {.format = SG_VERTEXFORMAT_FLOAT2}}},
-            .shader = shd,
-            .index_type = SG_INDEXTYPE_UINT16,
-            .depth = {.compare = SG_COMPAREFUNC_LESS_EQUAL, .write_enabled = true},
-            .cull_mode = SG_CULLMODE_BACK});
+        .layout = {
+            .attrs = {
+            {.format = SG_VERTEXFORMAT_FLOAT2},
+            {.format = SG_VERTEXFORMAT_FLOAT4},
+            }
+        },
+        .shader = shd,
+        .index_type = SG_INDEXTYPE_NONE,
+        .depth = {.compare = SG_COMPAREFUNC_LESS_EQUAL, .write_enabled = true},
+        .cull_mode = SG_CULLMODE_BACK,
+        .primitive_type = SG_PRIMITIVETYPE_LINES
+    });
+}
+
+sg_pipeline get_figures_pipeline() {
+    char *vs_shader_content = get_file_content("game/shaders/figures_vs.glsl");
+    char *ps_shader_content = get_file_content("game/shaders/figures_ps.glsl");
+
+    // create shader, note the combined-image-sampler description
+    sg_shader shd = sg_make_shader(&(sg_shader_desc) {
+        .vs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(figures_uniform_params),
+                .uniforms = {
+                {.name = "pos_offset", .type = SG_UNIFORMTYPE_FLOAT2},
+                {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
+                {.name = "is_selected", .type = SG_UNIFORMTYPE_INT},
+                {.name = "scale", .type = SG_UNIFORMTYPE_FLOAT}
+                },
+            },
+            .source = vs_shader_content,
+        },
+        .fs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(figures_uniform_params),
+                .uniforms = {
+                {.name = "pos_offset", .type = SG_UNIFORMTYPE_FLOAT2},
+                {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
+                {.name = "is_selected", .type = SG_UNIFORMTYPE_INT},
+                {.name = "scale", .type = SG_UNIFORMTYPE_FLOAT}
+                }
+            },
+            .images[0].used = true,
+            .samplers[0].used = true,
+            .image_sampler_pairs[0] = {.used = true, .glsl_name = "tex", .image_slot = 0, .sampler_slot = 0},
+            .source = ps_shader_content
+        }
+    });
+
+
+    // create pipeline object
+    return sg_make_pipeline(&(sg_pipeline_desc) {
+        .layout = {.attrs = {
+            [0] = {.format = SG_VERTEXFORMAT_FLOAT3},
+            [1] = {.format = SG_VERTEXFORMAT_FLOAT4},
+            [2] = {.format = SG_VERTEXFORMAT_FLOAT2}
+        }},
+        .shader = shd,
+        .index_type = SG_INDEXTYPE_UINT16,
+        .depth = {.compare = SG_COMPAREFUNC_LESS_EQUAL, .write_enabled = true},
+        .cull_mode = SG_CULLMODE_BACK
+    });
 }
 
 boardResult fill_board() {
@@ -506,5 +563,6 @@ boardResult fill_board() {
             result.vertices[i*8+j][3].color = color;
         }
     }
+
     return result;
 }
