@@ -27,9 +27,17 @@ project(
 # Including header files here helps IDEs but is not required.
 # Output libname matches target name, with the usual extensions on your system
 # Link each target with other targets or add options, etc.
-include_directories(/opt/homebrew/include deps/sokol deps/stb)
-link_directories(/opt/homebrew/Cellar/glfw/3.4/lib)
- 
+
+if(WIN32)
+    include_directories(/opt/homebrew/include deps/sokol deps/stb deps/glfw/include/GLFW)
+    link_directories(lib/glfw)
+elseif(APPLE)
+    include_directories(/opt/homebrew/include deps/sokol deps/stb)
+    link_directories(/opt/homebrew/Cellar/glfw/3.4/lib)
+elseif(UNIX)
+    message("no linux yet")
+endif()
+
 # Adding something we can run - Output name matches target name
 file(GLOB src
      "game/*.h"
@@ -39,6 +47,10 @@ add_executable(main ${src})
 
 # Make sure you link your targets with this command. It can also link libraries and
 # even flags, so linking a target that does not exist will not give a configure-time error.
-target_link_libraries(main glfw3 "-framework Cocoa" "-framework OpenGL" "-framework IOKit" "-framework Carbon")
-## [main]
-
+if(WIN32)
+    target_link_libraries(main glfw3)
+elseif(APPLE)
+    target_link_libraries(main glfw3 "-framework Cocoa" "-framework OpenGL" "-framework IOKit" "-framework Carbon")
+elseif(UNIX)
+    message("no linux yet")
+endif()

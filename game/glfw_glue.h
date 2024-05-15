@@ -1,5 +1,11 @@
 #define GLFW_INCLUDE_NONE
+
+#ifdef WIN32
+#include <glfw3.h>
+#else
 #include <GLFW/glfw3.h>
+#endif
+
 #include <stdbool.h>
 
 #if defined(__cplusplus)
@@ -20,7 +26,3 @@ int glfw_width(void);
 int glfw_height(void);
 sg_environment glfw_environment(void);
 sg_swapchain glfw_swapchain(void);
-
-#if defined(__cplusplus)
-} // extern "C"
-#endif

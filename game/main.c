@@ -2,7 +2,7 @@
 //------------------------------------------------------------------------------
 #define HANDMADE_MATH_IMPLEMENTATION
 #define HANDMADE_MATH_NO_SSE
-
+#define SOKOL_GLCORE
 #include "HandmadeMath.h"
 
 #define SOKOL_IMPL
@@ -396,7 +396,6 @@ int main() {
         for (int i = 0; i < 8; i++) {
             for (int j = 0; j < 8; j++) {
                 s_params.is_hovered = squares[i][j].is_hovered;
-                sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range) {.ptr = &s_params,.size = sizeof(s_params)});
                 sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range) {.ptr = &s_params,.size = sizeof(s_params)});
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range) {.ptr = &s_params,.size = sizeof(s_params)});
                 sg_apply_bindings(&(sg_bindings) { .vertex_buffers = squares[i][j].vertex_buffer, .index_buffer = ibuf });
