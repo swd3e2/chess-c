@@ -13,9 +13,8 @@ out vec4 frag_color;
 
 void main() {
   vec4 texColor = texture(tex, uv);
-  if(texColor.a < 0.1) discard;
   frag_color = texColor;
   if (is_selected > 0) {
-    frag_color += vec4(0.31f);
+    frag_color.xyz += vec3(0.31f);
   }
 }

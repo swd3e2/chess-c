@@ -29,10 +29,10 @@ project(
 # Link each target with other targets or add options, etc.
 
 if(WIN32)
-    include_directories(/opt/homebrew/include deps/sokol deps/stb deps/glfw/include/GLFW)
+    include_directories(/opt/homebrew/include deps/sokol deps/stb deps/glfw/include/GLFW deps/sokol/util)
     link_directories(lib/glfw)
 elseif(APPLE)
-    include_directories(/opt/homebrew/include deps/sokol deps/stb)
+    include_directories(/opt/homebrew/include deps/sokol deps/stb deps/sokol/util)
     link_directories(/opt/homebrew/Cellar/glfw/3.4/lib)
 elseif(UNIX)
     message("no linux yet")
@@ -43,7 +43,10 @@ file(GLOB src
      "game/*.h"
      "game/*.c"
 )
-add_executable(main ${src})
+add_executable(main ${src}
+        game/game.h
+        game/menu.h
+        game/gfx.h)
 
 # Make sure you link your targets with this command. It can also link libraries and
 # even flags, so linking a target that does not exist will not give a configure-time error.
