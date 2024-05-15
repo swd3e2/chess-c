@@ -13,20 +13,8 @@
 #include "sokol_log.h"
 #include "glfw_glue.h"
 #include "file.h"
-
-#include "stb_image.h"
-
-typedef struct {
-    float x, y;
-} vec2;
-
-typedef struct {
-    float x, y, z;
-} vec3;
-
-typedef struct {
-    float x, y, z, r;
-} vec4;
+#include "textures.h"
+#include "math.h"
 
 typedef struct {
     vec3 position;
@@ -42,21 +30,6 @@ typedef struct {
     int x;
     int y;
 } position_coord;
-
-const char *filenames[] = {
-        "assets/w_pawn_1x_ns.png",
-        "assets/w_rook_1x_ns.png",
-        "assets/w_bishop_1x_ns.png",
-        "assets/w_king_1x_ns.png",
-        "assets/w_knight_1x_ns.png",
-        "assets/w_queen_1x_ns.png",
-        "assets/b_pawn_1x_ns.png",
-        "assets/b_rook_1x_ns.png",
-        "assets/b_bishop_1x_ns.png",
-        "assets/b_king_1x_ns.png",
-        "assets/b_knight_1x_ns.png",
-        "assets/b_queen_1x_ns.png",
-};
 
 typedef struct {
     // type is index in textures array
@@ -87,24 +60,23 @@ typedef struct {
     float scale;
 } figures_uniform_params;
 
-typedef struct {
-    vertex vertices[64][4];
-} boardResult;
-
-
-boardResult fill_board();
+vertex** prepare_board_vertices();
 sg_pipeline get_board_pipeline();
 sg_pipeline get_figures_pipeline();
 sg_pipeline get_lines_pipeline();
-
 void clear_squares_possible_move();
+void fill_squares_with_figures();
 
-// Guess for what is this variable?
+void create_squares_vertex_buffers(vertex **vertices);
+
+void free_board_vertices(vertex **board_vertices);
+
+// Current position of cursor
 position_coord cursor_pos = {};
+// Position of last selected figure
 position_coord selected_pos = {};
+// Current selected figure, NULL if no figure is selected
 figure *selected_figure;
-// Figures textures
-sg_image *textures;
 // Chess board squares shit
 chess_square squares[8][8] = {0};
 // Who's going to move figures next
@@ -119,12 +91,14 @@ static void cursor_position_callback(GLFWwindow *window, double xpos, double ypo
         x -= 75;
         xCell++;
     }
+
     double y = ypos;
     int yCell = 0;
     while (y > 75) {
         y -= 75;
         yCell++;
     }
+
     cursor_pos.x = xCell;
     cursor_pos.y = 7 - yCell;
 }
@@ -204,73 +178,18 @@ int main() {
 
     // setup sokol_gfx
     sg_setup(&(sg_desc) {
-            .environment = glfw_environment(),
-            .logger.func = slog_func,
+        .environment = glfw_environment(),
+        .logger.func = slog_func,
     });
     assert(sg_isvalid());
 
-    textures = malloc(sizeof(sg_image) * 12);
-    for (int i = 0; i < 12; i++) {
-        int width, height, nrChannels;
-        unsigned char *data = stbi_load(filenames[i], &width, &height, &nrChannels, 0);
-        if (data == NULL) {
-            printf("could not find file %s\n", filenames[i]);
-            continue;
-        }
-        sg_image img = sg_make_image(&(sg_image_desc) {
-                .width = width,
-                .height = height,
-                .pixel_format = SG_PIXELFORMAT_RGBA8,
-                .data.subimage[0][0] = (sg_range) {.ptr = data, .size = width * height * 4}}
-        );
-        textures[i].id = img.id;
-    }
+    sg_image *textures = get_figures_textures();
+    vertex** board_vertices = prepare_board_vertices();
 
-    boardResult result = fill_board();
+    create_squares_vertex_buffers(board_vertices);
+    free_board_vertices(board_vertices);
 
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            squares[i][j].vertex_buffer = sg_make_buffer(&(sg_buffer_desc) { .type = SG_BUFFERTYPE_VERTEXBUFFER, .data = SG_RANGE(result.vertices[i * 8 + j]) });
-        }
-    }
-
-    for (int i =0; i < 8; i++) {
-        squares[0][i].figure = calloc(1, sizeof(figure));
-    }
-
-    squares[0][0].figure->figure_type = 1;
-    squares[0][7].figure->figure_type = 1;
-    squares[0][1].figure->figure_type = 4;
-    squares[0][6].figure->figure_type = 4;
-    squares[0][2].figure->figure_type = 2;
-    squares[0][5].figure->figure_type = 2;
-    squares[0][3].figure->figure_type = 3;
-    squares[0][4].figure->figure_type = 5;
-
-    for (int i = 0; i < 8; i++) {
-        figure *f = calloc(1, sizeof(figure));
-        squares[1][i].figure = f;
-    }
-
-    for (int i =0; i < 8; i++) {
-        squares[7][i].figure = calloc(1, sizeof(figure));
-        squares[7][i].figure->is_black = 1;
-    }
-
-    squares[7][0].figure->figure_type = 1;
-    squares[7][7].figure->figure_type = 1;
-    squares[7][1].figure->figure_type = 4;
-    squares[7][6].figure->figure_type = 4;
-    squares[7][2].figure->figure_type = 2;
-    squares[7][5].figure->figure_type = 2;
-    squares[7][3].figure->figure_type = 3;
-    squares[7][4].figure->figure_type = 5;
-
-    for (int i = 0; i < 8; i++) {
-        figure *f = calloc(1, sizeof(figure));
-        f->is_black = 1;
-        squares[6][i].figure = f;
-    }
+    fill_squares_with_figures();
 
     float startX = 0.0f;
     float startY = 0.0f;
@@ -296,7 +215,6 @@ int main() {
         .mag_filter = SG_FILTER_NEAREST,
     });
 
-    // create an index buffer for the cube
     uint16_t indices[] = {2, 1, 0, 3, 2, 0};
     sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc) { .type = SG_BUFFERTYPE_INDEXBUFFER, .data = SG_RANGE(indices) });
 
@@ -393,22 +311,89 @@ int main() {
             sg_draw(0, 6, 1);
         }
 
-
         sg_apply_pipeline(lines_pipeline);
         sg_apply_bindings(&(sg_bindings){
             .vertex_buffers = lines_b
         });
-        sg_update_buffer()
-        sg_draw(0, 2, 1);
 
+        sg_draw(0, 2, 1);
         sg_end_pass();
 
         sg_commit();
         glfwSwapBuffers(glfw_window());
         glfwPollEvents();
     }
+    free(textures);
     sg_shutdown();
     glfwTerminate();
+}
+
+void free_board_vertices(vertex **board_vertices) {
+    if (board_vertices == NULL) {
+        return;
+    }
+
+    for (int i = 0; i < 64; i++) {
+        if (board_vertices[i] == NULL) {
+            continue;
+        }
+        free(board_vertices[i]);
+    }
+    free(board_vertices);
+}
+
+void create_squares_vertex_buffers(vertex **vertices) {
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            squares[i][j].vertex_buffer = sg_make_buffer(&(sg_buffer_desc) {
+                    .type = SG_BUFFERTYPE_VERTEXBUFFER,
+                    .data = (sg_range){
+                            .ptr = vertices[i * 8 + j],
+                            .size = 4 * sizeof(vertex)
+                    }
+            });
+        }
+    }
+}
+
+void fill_squares_with_figures() {
+    for (int i =0; i < 8; i++) {
+        squares[0][i].figure = calloc(1, sizeof(figure));
+    }
+
+    squares[0][0].figure->figure_type = 1;
+    squares[0][7].figure->figure_type = 1;
+    squares[0][1].figure->figure_type = 4;
+    squares[0][6].figure->figure_type = 4;
+    squares[0][2].figure->figure_type = 2;
+    squares[0][5].figure->figure_type = 2;
+    squares[0][3].figure->figure_type = 3;
+    squares[0][4].figure->figure_type = 5;
+
+    for (int i = 0; i < 8; i++) {
+        figure *f = calloc(1, sizeof(figure));
+        squares[1][i].figure = f;
+    }
+
+    for (int i =0; i < 8; i++) {
+        squares[7][i].figure = calloc(1, sizeof(figure));
+        squares[7][i].figure->is_black = 1;
+    }
+
+    squares[7][0].figure->figure_type = 1;
+    squares[7][7].figure->figure_type = 1;
+    squares[7][1].figure->figure_type = 4;
+    squares[7][6].figure->figure_type = 4;
+    squares[7][2].figure->figure_type = 2;
+    squares[7][5].figure->figure_type = 2;
+    squares[7][3].figure->figure_type = 3;
+    squares[7][4].figure->figure_type = 5;
+
+    for (int i = 0; i < 8; i++) {
+        figure *f = calloc(1, sizeof(figure));
+        f->is_black = 1;
+        squares[6][i].figure = f;
+    }
 }
 
 sg_pipeline get_board_pipeline() {
@@ -532,14 +517,15 @@ sg_pipeline get_figures_pipeline() {
     });
 }
 
-boardResult fill_board() {
-    boardResult result;
+vertex** prepare_board_vertices() {
+    vertex **vertices = malloc(64 * sizeof(vertex*));
     float width = 1.0f / 8;
     float height = 1.0f / 8;
 
     for (int i = 0; i < 8; i++) {
         bool isEvenRow = i % 2 > 0;
         for (int j = 0; j < 8; j++) {
+            vertices[i * 8 + j] = malloc(4 * sizeof(vertex));
             bool isEvenColumn = j % 2 > 0;
 
             float startX = j * width * 2.0f - 1.0f;
@@ -547,22 +533,22 @@ boardResult fill_board() {
             float endX = startX + (width * 2);
             float endY = startY + (height * 2);
 
-            result.vertices[i * 8 + j][0].position = (vec3) {.x = startX, .y = startY, .z = -1.0f};
-            result.vertices[i * 8 + j][1].position = (vec3) {.x = endX, .y = startY, .z = -1.0f};
-            result.vertices[i * 8 + j][2].position = (vec3) {.x = endX, .y = endY, .z = -1.0f};
-            result.vertices[i * 8 + j][3].position = (vec3) {.x = startX, .y = endY, .z = -1.0f};
+            vertices[i * 8 + j][0].position = (vec3) {.x = startX, .y = startY, .z = -1.0f};
+            vertices[i * 8 + j][1].position = (vec3) {.x = endX, .y = startY, .z = -1.0f};
+            vertices[i * 8 + j][2].position = (vec3) {.x = endX, .y = endY, .z = -1.0f};
+            vertices[i * 8 + j][3].position = (vec3) {.x = startX, .y = endY, .z = -1.0f};
 
             vec4 color = (vec4){.x = 0.15f,.y = 0.15f,.z = 0.15f,.r = 1.0f, };
             if ((isEvenRow && isEvenColumn) || !isEvenRow && !isEvenColumn) {
                 color.x = color.y = color.z = color.r = 0.72f;
             }
 
-            result.vertices[i*8+j][0].color = color;
-            result.vertices[i*8+j][1].color = color;
-            result.vertices[i*8+j][2].color = color;
-            result.vertices[i*8+j][3].color = color;
+            vertices[i*8+j][0].color = color;
+            vertices[i*8+j][1].color = color;
+            vertices[i*8+j][2].color = color;
+            vertices[i*8+j][3].color = color;
         }
     }
 
-    return result;
+    return vertices;
 }
