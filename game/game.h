@@ -279,7 +279,6 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
             for (int i = 0; i < 4; i++) {
                 position_coord current_position = cursor_pos;
 
-                bool has_found_enemy = false;
                 while(true) {
                     current_position.x += moves[i].x;
                     current_position.y += moves[i].y;
@@ -289,8 +288,8 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
                     if (sq->figure != NULL) {
                         if (sq->figure->is_black == f->is_black) break;
 
-                        if (has_found_enemy) break;
-                        has_found_enemy = true;
+                        sq->possible_move = true;
+                        break;
                     }
                     sq->possible_move = true;
                 };
