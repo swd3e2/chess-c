@@ -46,7 +46,8 @@ file(GLOB src
 add_executable(main ${src}
         game/game.h
         game/menu.h
-        game/gfx.h)
+        game/gfx.h
+        game/button.h)
 
 # Make sure you link your targets with this command. It can also link libraries and
 # even flags, so linking a target that does not exist will not give a configure-time error.

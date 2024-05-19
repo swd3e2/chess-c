@@ -9,12 +9,12 @@
 #include "math.h"
 #define SOKOL_DEBUGTEXT_IMPL
 #include "sokol_debugtext.h"
+#include "button.h"
 
 #define NUM_FONTS  (3)
 #define FONT_KC854 (0)
 #define FONT_C64   (1)
 #define FONT_ORIC  (2)
-
 
 sg_pipeline get_menu_pipeline();
 
@@ -23,15 +23,19 @@ typedef struct {
 } menu_uniform_params;
 
 typedef struct {
-    vec2 position;
-    vec4 color;
-} button_vertex;
-
-typedef struct {
-    sg_buffer button;
-    sg_buffer ibuf;
+    button start_button;
+    button exit_button;
     sg_pipeline menu_pipeline;
 } menu_stuff;
+
+
+void menu_mouse_move_callback(menu_stuff* m, double xpos, double ypos) {
+
+}
+
+void menu_mouse_click_callback(menu_stuff* g, int button, int action) {
+
+}
 
 void menu_init(menu_stuff *m) {
     sdtx_setup(&(sdtx_desc_t){
@@ -45,46 +49,18 @@ void menu_init(menu_stuff *m) {
 
     m->menu_pipeline = get_menu_pipeline();
 
-    float startX = -0.5f;
-    float startY = -0.125f;
-    float endX = 0.5f;
-    float endY = 0.125f;
-
-    button_vertex vertices[] = {
-            {.position = (vec2){ .x = startX, .y = startY}, .color = (vec4){.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f}},
-            {.position = (vec2){ .x = endX, .y = startY}, .color = (vec4){.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f}},
-            {.position = (vec2){ .x = endX, .y = endY}, .color = (vec4){.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f}},
-            {.position = (vec2){ .x = startX, .y = endY}, .color = (vec4){.x = 1.0f, .y = 1.0f, .z = 1.0f, .r = 1.0f}},
-    };
-
-    m->button = sg_make_buffer(&(sg_buffer_desc){
-        .data = (sg_range) {
-            .ptr = vertices,
-            .size = sizeof(button_vertex) * 4
-        }
+    m->start_button = create_button(&(button_desc){
+        .corners = (corners) {
+            .bottom_left = (vec2){.x = -0.5f, .y = -0.125f},
+            .top_right = (vec2){.x = 0.5f, .y = 0.125f}
+        },
+        .text = "Start"
     });
-    uint16_t indices[] = {2, 1, 0, 3, 2, 0};
-    m->ibuf = sg_make_buffer(&(sg_buffer_desc) { .type = SG_BUFFERTYPE_INDEXBUFFER, .data = SG_RANGE(indices) });
 }
 
 void menu_frame_play(menu_stuff *m) {
-
     sg_apply_pipeline(m->menu_pipeline);
-    menu_uniform_params params;
-    params.is_hovered = false;
-    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range) {.ptr = &params,.size = sizeof(params)});
-    sg_apply_bindings(&(sg_bindings) {
-            .vertex_buffers = m->button,
-            .index_buffer = m->ibuf,
-    });
-    sg_draw(0, 6, 1);
-
-    sdtx_canvas(600 * 0.5f, 600 * 0.5f);
-    sdtx_origin(16.0f, 18.0f);
-    sdtx_font(FONT_KC854);
-    sdtx_color3b(1.0f, 0.0f, 0.0f);
-    sdtx_printf("Start");
-    sdtx_draw();
+    b_render(&m->start_button);
 }
 
 sg_pipeline get_menu_pipeline() {
@@ -113,7 +89,9 @@ sg_pipeline get_menu_pipeline() {
         }
     });
 
-    // create pipeline object
+    free(vs_shader_content);
+    free(ps_shader_content);
+
     return sg_make_pipeline(&(sg_pipeline_desc) {
         .layout = {
             .attrs = {

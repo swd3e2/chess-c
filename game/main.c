@@ -18,7 +18,7 @@ enum GAME_STATE {
     GAME
 };
 
-enum GAME_STATE state = MENU;
+enum GAME_STATE state = GAME;
 
 // Game data to render/play
 game_stuff g = {0};
@@ -29,22 +29,71 @@ static void cursor_position_callback(GLFWwindow *window, double xpos, double ypo
     if (state == GAME) {
         game_mouse_move_callback(&g, xpos, ypos);
     } else {
-        //menu_move_callback(&g, button, action);
+        float window_coord_x = -1.0f + (2 * (xpos / 600.0f));
+        float window_coord_y = 1.0f - (2 * (ypos / 600.0f));
+
+        if (b_inside_corners(&m.start_button, window_coord_x, window_coord_y)) {
+            m.start_button.is_hovered = true;
+        } else {
+            m.start_button.is_hovered = false;
+        }
     }
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
-    if (state == GAME) {
-        game_mouse_click_callback(&g, button, action);
-    } else {
-        //menu_mouse_callback(&g, button, action);
+    switch (state) {
+        case GAME:
+            game_mouse_click_callback(&g, button, action);
+            break;
+        case MENU:
+            if (!m.start_button.is_hovered) {
+                return;
+            }
+            if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+                state = GAME;
+            }
+            break;
     }
 }
 
+char* vec3_to_json(vec3 *v) {
+    size_t needed = snprintf(NULL, 0, "{\"x\":%f,\"y\":%f,\"z\":%f}", v->x, v->y, v->z)+1;
+    char * buffer = malloc(needed);
+    sprintf(buffer, "{\"x\":%f,\"y\":%f,\"z\":%f}", v->x, v->y, v->z);
+    return buffer;
+}
+char* vec4_to_json(vec4 *v) {
+    size_t needed = snprintf(NULL, 0, "{\"x\":%f,\"y\":%f,\"z\":%f,\"r\":%f}", v->x, v->y, v->z, v->r)+1;
+    char * buffer = malloc(needed);
+    sprintf(buffer, "{\"x\":%f,\"y\":%f,\"z\":%f,\"r\":%f}", v->x, v->y, v->z, v->r);
+    return buffer;
+}
+
+char* vertex_to_json(vertex* v) {
+    char *pos = vec3_to_json(&v->position);
+    char *color = vec4_to_json(&v->color);
+
+    size_t needed = snprintf(NULL, 0, "{\"pos\":%s,\"col\":%s}", pos, color)+1;
+    char * buffer = malloc(needed);
+    sprintf(buffer, "{\"pos\":%s,\"col\":%s}", pos, color);
+
+    free(pos);
+    free(color);
+
+    return buffer;
+}
+
 int main() {
+    vertex v = (vertex){
+        .position = (vec3){.x = 1.0f, .y = 2.0f, .z = 3.0f},
+        .color = (vec4){.x = 1.0f, .y = 2.0f, .z = 3.0f, .r = 4.0f},
+    };
+    char* vertex_json = vertex_to_json(&v);
+    printf("%s\n", vertex_json);
+    free(vertex_json);
     // create GLFW window and initialize GL
     glfw_init(&(glfw_desc_t) {
-        .title = "texcube-glfw.c",
+        .title = "Chess-C",
         .width = 600,
         .height = 600,
         .sample_count = 4
@@ -66,10 +115,13 @@ int main() {
     while (!glfwWindowShouldClose(glfw_window())) {
         sg_begin_pass(&(sg_pass) {.action = pass_action, .swapchain = glfw_swapchain()});
 
-        if (state == GAME) {
-            game_frame_play(&g);
-        } else {
-            menu_frame_play(&m);
+        switch (state) {
+            case GAME:
+                game_frame_play(&g);
+                break;
+            case MENU:
+                menu_frame_play(&m);
+                break;
         }
 
         sg_end_pass();

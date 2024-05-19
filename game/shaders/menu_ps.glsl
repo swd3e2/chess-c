@@ -8,4 +8,7 @@ in vec4 color;
 
 void main() {
   frag_color = color;
+  if (is_hovered == 1) {
+    frag_color.xyz -= vec3(0.2f);
+  }
 }

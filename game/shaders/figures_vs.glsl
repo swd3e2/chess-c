@@ -15,10 +15,6 @@ void main() {
   gl_Position = position;
   gl_Position.xy += pos_offset.xy;
 
-  if (is_selected == 1) {
-    gl_Position.xy *= scale;
-  }
-
   color = color0;
   uv = texcoord0;
 }
