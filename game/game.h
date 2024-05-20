@@ -6,11 +6,11 @@
 #define CHESS_GAME_H
 
 #ifndef min
-#define min(a, b) ((a > b) ? b : a)
+#define min(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
 #ifndef max
-#define max(a, b) ((a < b) ? b : a)
+#define max(a,b) (((a) > (b)) ? (a) : (b))
 #endif
 
 #include "math.h"
@@ -242,9 +242,9 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
         case 1: {
             position_coord moves[] = {
                 (position_coord ){.x = -1, .y = 0},
-                (position_coord ){.x = 1, .y = 0},
-                (position_coord ){.x = 0, .y = 1},
-                (position_coord ){.x = 0, .y = -1},
+                (position_coord ){.x = 1,  .y = 0},
+                (position_coord ){.x = 0,  .y = 1},
+                (position_coord ){.x = 0,  .y = -1},
             };
 
             for (int i = 0; i < 4; i++) {
@@ -260,19 +260,20 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
                     if (sq->figure != NULL) {
                         if (sq->figure->is_black == f->is_black) break;
 
-                        if (has_found_enemy) break;
-                        has_found_enemy = true;
+                        sq->possible_move = true;
+                        break;
                     }
                     sq->possible_move = true;
                 };
             }
+            break;
         }
         // Bishop
         case 2: {
             position_coord moves[] = {
-                    (position_coord ){.x = -1, .y =  1 },
+                    (position_coord ){.x = -1, .y =  1},
                     (position_coord ){.x =  1, .y = -1},
-                    (position_coord ){.x =  1, .y =  1 },
+                    (position_coord ){.x =  1, .y =  1},
                     (position_coord ){.x = -1, .y = -1},
             };
 
@@ -294,6 +295,74 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
                     sq->possible_move = true;
                 };
             }
+            break;
+        }
+        // Knight
+        case 4: {
+            position_coord moves[] = {
+                    (position_coord ){.x =  1, .y = 2},
+                    (position_coord ){.x = -1, .y = 2},
+
+                    (position_coord ){.x =  1, .y = -2},
+                    (position_coord ){.x = -1, .y = -2},
+
+                    (position_coord ){.x =  2, .y =  1},
+                    (position_coord ){.x =  2, .y = -1},
+
+                    (position_coord ){.x =  -2, .y =  1},
+                    (position_coord ){.x =  -2, .y = -1},
+            };
+
+            for (int i = 0; i < 8; i++) {
+                position_coord current_position = cursor_pos;
+
+                current_position.x += moves[i].x;
+                current_position.y += moves[i].y;
+
+                if (!pc_is_valid(current_position)) continue;
+                chess_square *sq = &g->squares[current_position.y][current_position.x];
+                if (sq->figure != NULL) {
+                    if (sq->figure->is_black == f->is_black) continue;
+
+                    sq->possible_move = true;
+                    continue;
+                }
+                sq->possible_move = true;
+            }
+            break;
+        }
+        // Queen
+        case 5: {
+            position_coord moves[] = {
+                    (position_coord ){.x = -1, .y = 0},
+                    (position_coord ){.x = 1,  .y = 0},
+                    (position_coord ){.x = 0,  .y = 1},
+                    (position_coord ){.x = 0,  .y = -1},
+                    (position_coord ){.x = -1, .y =  1},
+                    (position_coord ){.x =  1, .y = -1},
+                    (position_coord ){.x =  1, .y =  1},
+                    (position_coord ){.x = -1, .y = -1},
+            };
+
+            for (int i = 0; i < 8; i++) {
+                position_coord current_position = cursor_pos;
+
+                while(true) {
+                    current_position.x += moves[i].x;
+                    current_position.y += moves[i].y;
+
+                    if (!pc_is_valid(current_position)) break;
+                    chess_square *sq = &g->squares[current_position.y][current_position.x];
+                    if (sq->figure != NULL) {
+                        if (sq->figure->is_black == f->is_black) break;
+
+                        sq->possible_move = true;
+                        break;
+                    }
+                    sq->possible_move = true;
+                };
+            }
+            break;
         }
     }
 }
