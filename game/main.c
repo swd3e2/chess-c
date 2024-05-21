@@ -13,12 +13,17 @@
 #include "gfx.h"
 #include "textures.h"
 
+#define NUM_FONTS  (3)
+#define FONT_KC854 (0)
+#define FONT_C64   (1)
+#define FONT_ORIC  (2)
+
 enum GAME_STATE {
     MENU,
     GAME
 };
 
-enum GAME_STATE state = GAME;
+enum GAME_STATE state = MENU;
 
 // Game data to render/play
 game_stuff g = {0};
@@ -107,6 +112,15 @@ int main() {
         .logger.func = slog_func,
     });
     assert(sg_isvalid());
+
+    sdtx_setup(&(sdtx_desc_t){
+            .fonts = {
+                    [FONT_KC854] = sdtx_font_kc854(),
+                    [FONT_C64]   = sdtx_font_c64(),
+                    [FONT_ORIC]  = sdtx_font_oric()
+            },
+            .logger.func = slog_func,
+    });
 
     menu_init(&m);
     game_init(&g);

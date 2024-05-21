@@ -20,6 +20,13 @@
 #include "file.h"
 #include <time.h>
 
+#define PAWN 0
+#define ROOK 1
+#define BISHOP 2
+#define KING 3
+#define KNIGHT 4
+#define QUEEN 5
+
 //
 //#define COLOR_SQUARE_WHITE (vec4){.x = 0.3f,.y = 0.3f,.z = 0.3f,.r = 1.0f, }
 //#define COLOR_SQUARE_BLACK (vec4){.x = 0.6f,.y = 0.6f,.z = 0.6f,.r = 1.0f, }
@@ -63,23 +70,19 @@ typedef struct {
 
 typedef struct {
     sg_buffer vertex_buffer;
-    bool is_hovered;
     bool possible_move;
     bool attack_move;
     figure *figure;
 } chess_square;
 
 typedef struct {
-    int is_hovered;
     int possible_move;
     int attack_move;
 } squares_uniform_params;
 
 typedef struct {
     vec2 pos_offset;
-    int is_hovered;
     int is_selected;
-    float scale;
 } figures_uniform_params;
 
 vertex** prepare_board_vertices();
@@ -110,6 +113,7 @@ typedef struct {
     sg_sampler smp;
 
     select_square s_square;
+    bool game_over;
 } game_stuff;
 
 void fill_squares_with_figures(game_stuff* g);
@@ -129,6 +133,8 @@ void sq_clear_possible_move(game_stuff* g) {
 }
 
 void game_mouse_click_callback(game_stuff* g, int button, int action) {
+    if (g->game_over) return;
+
     if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) {
         return;
     }
@@ -152,6 +158,7 @@ void game_mouse_click_callback(game_stuff* g, int button, int action) {
         return;
     }
 
+    // Deselecting same figure
     if (f == g->selected_figure) {
         f->is_selected = false;
         g->selected_pos.x = 0;
@@ -166,6 +173,11 @@ void game_mouse_click_callback(game_stuff* g, int button, int action) {
             return;
         }
 
+        figure* figure_to_kill = g->squares[g->cursor_pos.y][g->cursor_pos.x].figure;
+        if (figure_to_kill->figure_type == KING) {
+            g->game_over = 1;
+        }
+        printf("%d\n", figure_to_kill->figure_type);
         g->squares[g->selected_pos.y][g->selected_pos.x].figure = NULL;
         g->squares[g->cursor_pos.y][g->cursor_pos.x].figure = g->selected_figure;
         g->selected_figure->is_selected = false;
@@ -204,11 +216,9 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
     position_coord cursor_pos = g->cursor_pos;
     int cursor_pos_x = cursor_pos.x;
     int cursor_pos_y = cursor_pos.y;
-    printf("x %d y %d\n", cursor_pos_x, cursor_pos_y);
 
     switch (f->figure_type) {
-        // Pawn
-        case 0: {
+        case PAWN: {
             int y_movement = 1;
             if (f->is_black) {
                 y_movement = -1;
@@ -238,8 +248,7 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
             }
             break;
         }
-        // Rook
-        case 1: {
+        case ROOK: {
             position_coord moves[] = {
                 (position_coord ){.x = -1, .y = 0},
                 (position_coord ){.x = 1,  .y = 0},
@@ -268,8 +277,7 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
             }
             break;
         }
-        // Bishop
-        case 2: {
+        case BISHOP: {
             position_coord moves[] = {
                     (position_coord ){.x = -1, .y =  1},
                     (position_coord ){.x =  1, .y = -1},
@@ -297,8 +305,37 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
             }
             break;
         }
-        // Knight
-        case 4: {
+        case KING: {
+            position_coord moves[] = {
+                    (position_coord ){.x =  1, .y =  0},
+                    (position_coord ){.x = -1, .y =  0},
+                    (position_coord ){.x =  0, .y = -1},
+                    (position_coord ){.x =  0, .y =  1},
+                    (position_coord ){.x =  1, .y =  1},
+                    (position_coord ){.x =  1, .y = -1},
+                    (position_coord ){.x = -1, .y =  1},
+                    (position_coord ){.x = -1, .y = -1},
+            };
+
+            for (int i = 0; i < 8; i++) {
+                position_coord current_position = cursor_pos;
+
+                current_position.x += moves[i].x;
+                current_position.y += moves[i].y;
+
+                if (!pc_is_valid(current_position)) continue;
+                chess_square *sq = &g->squares[current_position.y][current_position.x];
+                if (sq->figure != NULL) {
+                    if (sq->figure->is_black == f->is_black) continue;
+
+                    sq->possible_move = true;
+                    continue;
+                }
+                sq->possible_move = true;
+            }
+            break;
+        }
+        case KNIGHT: {
             position_coord moves[] = {
                     (position_coord ){.x =  1, .y = 2},
                     (position_coord ){.x = -1, .y = 2},
@@ -331,8 +368,7 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
             }
             break;
         }
-        // Queen
-        case 5: {
+        case QUEEN: {
             position_coord moves[] = {
                     (position_coord ){.x = -1, .y = 0},
                     (position_coord ){.x = 1,  .y = 0},
@@ -392,16 +428,16 @@ void game_init(game_stuff *g) {
     const char* figure_texture_filenames[] = {
         "assets/w_pawn.png",
         "assets/w_rook.png",
-        "assets/w_bishop_1x_ns.png",
-        "assets/w_king_1x_ns.png",
-        "assets/w_knight_1x_ns.png",
-        "assets/w_queen_1x_ns.png",
+        "assets/w_bishop.png",
+        "assets/w_king.png",
+        "assets/w_knight.png",
+        "assets/w_queen.png",
         "assets/b_pawn.png",
         "assets/b_rook.png",
-        "assets/b_bishop_1x_ns.png",
-        "assets/b_king_1x_ns.png",
-        "assets/b_knight_1x_ns.png",
-        "assets/b_queen_1x_ns.png",
+        "assets/b_bishop.png",
+        "assets/b_king.png",
+        "assets/b_knight.png",
+        "assets/b_queen.png",
     };
     g->textures = get_multiple_textures(figure_texture_filenames, sizeof(figure_texture_filenames) / sizeof(char*));
     vertex** board_vertices = prepare_board_vertices();
@@ -476,7 +512,6 @@ void game_frame_play(game_stuff* g) {
 
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
-            g->squares[i][j].is_hovered = false;
             if (g->squares[i][j].figure == NULL) {
                 continue;
             }
@@ -490,16 +525,11 @@ void game_frame_play(game_stuff* g) {
         }
     }
 
-    if (g->cursor_pos.y > -1 && g->cursor_pos.x > -1) {
-        g->squares[g->cursor_pos.y][g->cursor_pos.x].is_hovered = true;
-    }
-
     sg_apply_pipeline(g->board_pipeline);
 
     squares_uniform_params s_params = {0};
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
-            s_params.is_hovered = g->squares[i][j].is_hovered;
             s_params.possible_move = g->squares[i][j].possible_move;
             s_params.attack_move = g->squares[i][j].attack_move;
 
@@ -519,16 +549,10 @@ void game_frame_play(game_stuff* g) {
         }
 
         params.is_selected = fig->is_selected;
-        params.scale = 0;
-
-        if (fig->is_selected == true) {
-            params.scale = 1.02f;
-        }
 
         params.pos_offset.x = -(1.0f - 2.0f * fig->position.x * 0.125f) + 0.02f;
         params.pos_offset.y = (1.0f - 2.0f * fig->position.y * 0.125f) - 0.25f + 0.02f;
 
-        params.is_hovered = 1;
         sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range) {.ptr = &params,.size = sizeof(params)});
         sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range) {.ptr = &params,.size = sizeof(params)});
 
@@ -544,6 +568,20 @@ void game_frame_play(game_stuff* g) {
                 .fs = {.images[0] = figure_image, .samplers[0] = g->smp }
         });
         sg_draw(0, 6, 1);
+    }
+
+    if (g->game_over) {
+        sdtx_canvas(600 * 0.5f, 600 * 0.5f);
+        sdtx_origin(10.0f, 18.0f);
+        sdtx_font(1);
+        sdtx_color3b(1.0f, 0.0f, 0.0f);
+        if (g->black_player_turn) {
+            sdtx_printf("GAME OVER WHITE WON");
+        } else {
+            sdtx_printf("GAME OVER BLACK WON");
+        }
+        sdtx_draw();
+        return;
     }
 
     // Cursor things
@@ -573,12 +611,12 @@ void game_frame_play(game_stuff* g) {
         sg_draw(0, 6, 1);
     }
 
-    sg_apply_pipeline(g->lines_pipeline);
-    sg_apply_bindings(&(sg_bindings){
-            .vertex_buffers = g->lines_b
-    });
-
-    sg_draw(0, 2, 1);
+//    sg_apply_pipeline(g->lines_pipeline);
+//    sg_apply_bindings(&(sg_bindings){
+//            .vertex_buffers = g->lines_b
+//    });
+//
+//    sg_draw(0, 2, 1);
 }
 
 void free_board_vertices(vertex **board_vertices) {
@@ -620,7 +658,6 @@ sg_pipeline get_board_pipeline() {
                     .uniform_blocks[0] = {
                             .size = sizeof(squares_uniform_params),
                             .uniforms = {
-                                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
                                     {.name = "possible_move", .type = SG_UNIFORMTYPE_INT},
                                     {.name = "attack_move", .type = SG_UNIFORMTYPE_INT},
                             },
@@ -631,7 +668,6 @@ sg_pipeline get_board_pipeline() {
                     .uniform_blocks[0] = {
                             .size = sizeof(squares_uniform_params),
                             .uniforms = {
-                                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
                                     {.name = "possible_move", .type = SG_UNIFORMTYPE_INT},
                                     {.name = "attack_move", .type = SG_UNIFORMTYPE_INT},
                             },
@@ -691,9 +727,7 @@ sg_pipeline get_figures_pipeline() {
                             .size = sizeof(figures_uniform_params),
                             .uniforms = {
                                     {.name = "pos_offset", .type = SG_UNIFORMTYPE_FLOAT2},
-                                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
                                     {.name = "is_selected", .type = SG_UNIFORMTYPE_INT},
-                                    {.name = "scale", .type = SG_UNIFORMTYPE_FLOAT}
                             },
                     },
                     .source = vs_shader_content,
@@ -703,9 +737,7 @@ sg_pipeline get_figures_pipeline() {
                             .size = sizeof(figures_uniform_params),
                             .uniforms = {
                                     {.name = "pos_offset", .type = SG_UNIFORMTYPE_FLOAT2},
-                                    {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
                                     {.name = "is_selected", .type = SG_UNIFORMTYPE_INT},
-                                    {.name = "scale", .type = SG_UNIFORMTYPE_FLOAT}
                             }
                     },
                     .images[0].used = true,
@@ -806,6 +838,12 @@ void fill_squares_with_figures(game_stuff* g) {
         f->is_black = 1;
         g->squares[6][i].figure = f;
     }
+
+
+//    g->squares[2][0].figure = g->squares[7][3].figure;
+//    g->squares[7][3].figure = NULL;
+    g->squares[5][0].figure = g->squares[0][3].figure;
+    g->squares[0][3].figure = NULL;
 }
 
 #endif //CHESS_GAME_H

@@ -7,14 +7,10 @@
 
 #include "gfx.h"
 #include "math.h"
-#define SOKOL_DEBUGTEXT_IMPL
-#include "sokol_debugtext.h"
+
 #include "button.h"
 
-#define NUM_FONTS  (3)
-#define FONT_KC854 (0)
-#define FONT_C64   (1)
-#define FONT_ORIC  (2)
+
 
 sg_pipeline get_menu_pipeline();
 
@@ -38,15 +34,6 @@ void menu_mouse_click_callback(menu_stuff* g, int button, int action) {
 }
 
 void menu_init(menu_stuff *m) {
-    sdtx_setup(&(sdtx_desc_t){
-            .fonts = {
-                    [FONT_KC854] = sdtx_font_kc854(),
-                    [FONT_C64]   = sdtx_font_c64(),
-                    [FONT_ORIC]  = sdtx_font_oric()
-            },
-            .logger.func = slog_func,
-    });
-
     m->menu_pipeline = get_menu_pipeline();
 
     m->start_button = create_button(&(button_desc){

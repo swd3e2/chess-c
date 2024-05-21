@@ -1,7 +1,6 @@
 #version 330
 
 uniform vec2 posOffset;
-uniform int is_hovered;
 uniform int is_selected;
 
 uniform sampler2D tex;

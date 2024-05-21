@@ -1,6 +1,5 @@
 #version 330
 
-uniform int is_hovered;
 uniform int possible_move;
 uniform int attack_move;
 

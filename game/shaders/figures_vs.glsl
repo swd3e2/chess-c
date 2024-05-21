@@ -1,9 +1,7 @@
 #version 330
 
 uniform vec2 pos_offset;
-uniform int is_hovered;
 uniform int is_selected;
-uniform float scale;
 
 layout(location = 0) in vec4 position;
 layout(location = 1) in vec4 color0;

@@ -71,7 +71,7 @@ void b_render(button *b) {
 
     sdtx_canvas(600 * 0.5f, 600 * 0.5f);
     sdtx_origin(16.0f, 18.0f);
-    sdtx_font(0);
+    sdtx_font(1);
     sdtx_color3b(1.0f, 0.0f, 0.0f);
     sdtx_printf("Start");
     sdtx_draw();

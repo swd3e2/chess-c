@@ -24,6 +24,8 @@ sg_image* get_multiple_textures(const char** filenames, int size) {
                 .data.subimage[0][0] = (sg_range) {.ptr = data, .size = width * height * 4}}
         );
         textures[i].id = img.id;
+
+        stbi_image_free(data);
     }
 
     return textures;
@@ -42,6 +44,8 @@ sg_image get_texture(const char* filename) {
             .pixel_format = SG_PIXELFORMAT_RGBA8,
             .data.subimage[0][0] = (sg_range) {.ptr = data, .size = width * height * 4}}
     );
+    stbi_image_free(data);
+
     return img;
 }
 
