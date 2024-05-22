@@ -19,6 +19,7 @@
 #include "textures.h"
 #include "file.h"
 #include <time.h>
+#include "arena.h"
 
 #define PAWN 0
 #define ROOK 1
@@ -44,7 +45,7 @@ typedef struct {
 typedef struct {
     vec3 position;
     vec4 color;
-} vertex;
+} vertex2;
 
 typedef struct {
     vec2 position;
@@ -85,7 +86,7 @@ typedef struct {
     int is_selected;
 } figures_uniform_params;
 
-vertex** prepare_board_vertices();
+vertex2** prepare_board_vertices();
 sg_pipeline get_board_pipeline();
 sg_pipeline get_figures_pipeline();
 sg_pipeline get_lines_pipeline();
@@ -114,13 +115,17 @@ typedef struct {
 
     select_square s_square;
     bool game_over;
+
+    arena arena;
 } game_stuff;
+
+void restart(game_stuff* g);
 
 void fill_squares_with_figures(game_stuff* g);
 
-void create_squares_vertex_buffers(game_stuff* g, vertex **vertices);
+void create_squares_vertex_buffers(game_stuff* g, vertex2 **vertices);
 
-void free_board_vertices(vertex **board_vertices);
+void free_board_vertices(vertex2 **board_vertices);
 
 void sq_check_possible_move(game_stuff* g, figure* f);
 
@@ -133,9 +138,12 @@ void sq_clear_possible_move(game_stuff* g) {
 }
 
 void game_mouse_click_callback(game_stuff* g, int button, int action) {
-    if (g->game_over) return;
-
     if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) {
+        return;
+    }
+
+    if (g->game_over) {
+        restart(g);
         return;
     }
 
@@ -425,6 +433,8 @@ void game_mouse_move_callback(game_stuff* g, double xpos, double ypos) {
 }
 
 void game_init(game_stuff *g) {
+    g->arena = arena_create(sizeof(figure) * 32);
+
     const char* figure_texture_filenames[] = {
         "assets/w_pawn.png",
         "assets/w_rook.png",
@@ -440,7 +450,7 @@ void game_init(game_stuff *g) {
         "assets/b_queen.png",
     };
     g->textures = get_multiple_textures(figure_texture_filenames, sizeof(figure_texture_filenames) / sizeof(char*));
-    vertex** board_vertices = prepare_board_vertices();
+    vertex2** board_vertices = prepare_board_vertices();
 
     create_squares_vertex_buffers(g, board_vertices);
     free_board_vertices(board_vertices);
@@ -574,13 +584,20 @@ void game_frame_play(game_stuff* g) {
         sdtx_canvas(600 * 0.5f, 600 * 0.5f);
         sdtx_origin(10.0f, 18.0f);
         sdtx_font(1);
-        sdtx_color3b(1.0f, 0.0f, 0.0f);
+        sdtx_color3b(205.0f, 205.0f, 205.0f);
         if (g->black_player_turn) {
             sdtx_printf("GAME OVER WHITE WON");
         } else {
             sdtx_printf("GAME OVER BLACK WON");
         }
+
+        sdtx_canvas(600 * 0.5f, 600 * 0.5f);
+        sdtx_font(1);
+        sdtx_color3b(205.0f, 205.0f, 205.0f);
+        sdtx_origin(9.0f, 19.0f);
+        sdtx_printf("CLICK TO START NEW GAME");
         sdtx_draw();
+
         return;
     }
 
@@ -619,7 +636,7 @@ void game_frame_play(game_stuff* g) {
 //    sg_draw(0, 2, 1);
 }
 
-void free_board_vertices(vertex **board_vertices) {
+void free_board_vertices(vertex2 **board_vertices) {
     if (board_vertices == NULL) {
         return;
     }
@@ -633,14 +650,14 @@ void free_board_vertices(vertex **board_vertices) {
     free(board_vertices);
 }
 
-void create_squares_vertex_buffers(game_stuff* g, vertex **vertices) {
+void create_squares_vertex_buffers(game_stuff* g, vertex2 **vertices) {
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
             g->squares[i][j].vertex_buffer = sg_make_buffer(&(sg_buffer_desc) {
                     .type = SG_BUFFERTYPE_VERTEXBUFFER,
                     .data = (sg_range){
                             .ptr = vertices[i * 8 + j],
-                            .size = 4 * sizeof(vertex)
+                            .size = 4 * sizeof(vertex2)
                     }
             });
         }
@@ -763,15 +780,15 @@ sg_pipeline get_figures_pipeline() {
     });
 }
 
-vertex** prepare_board_vertices() {
-    vertex **vertices = malloc(64 * sizeof(vertex*));
+vertex2** prepare_board_vertices() {
+    vertex2 **vertices = malloc(64 * sizeof(vertex2*));
     float width = 1.0f / 8;
     float height = 1.0f / 8;
 
     for (int i = 0; i < 8; i++) {
         bool isEvenRow = i % 2 > 0;
         for (int j = 0; j < 8; j++) {
-            vertices[i * 8 + j] = malloc(4 * sizeof(vertex));
+            vertices[i * 8 + j] = malloc(4 * sizeof(vertex2));
             bool isEvenColumn = j % 2 > 0;
 
             float startX = j * width * 2.0f - 1.0f;
@@ -799,10 +816,9 @@ vertex** prepare_board_vertices() {
     return vertices;
 }
 
-//todo: think about creating figures without malloc\calloc
 void fill_squares_with_figures(game_stuff* g) {
     for (int i =0; i < 8; i++) {
-        g->squares[0][i].figure = calloc(1, sizeof(figure));
+        g->squares[0][i].figure = arena_get_memory(&g->arena, sizeof(figure));//calloc(1, sizeof(figure));
     }
 
     g->squares[0][0].figure->figure_type = 1;
@@ -815,12 +831,12 @@ void fill_squares_with_figures(game_stuff* g) {
     g->squares[0][4].figure->figure_type = 5;
 
     for (int i = 0; i < 8; i++) {
-        figure *f = calloc(1, sizeof(figure));
+        figure *f = arena_get_memory(&g->arena, sizeof(figure));
         g->squares[1][i].figure = f;
     }
 
     for (int i =0; i < 8; i++) {
-        g->squares[7][i].figure = calloc(1, sizeof(figure));
+        g->squares[7][i].figure = arena_get_memory(&g->arena,  sizeof(figure));
         g->squares[7][i].figure->is_black = 1;
     }
 
@@ -834,7 +850,7 @@ void fill_squares_with_figures(game_stuff* g) {
     g->squares[7][4].figure->figure_type = 5;
 
     for (int i = 0; i < 8; i++) {
-        figure *f = calloc(1, sizeof(figure));
+        figure *f = arena_get_memory(&g->arena, sizeof(figure));
         f->is_black = 1;
         g->squares[6][i].figure = f;
     }
@@ -842,8 +858,20 @@ void fill_squares_with_figures(game_stuff* g) {
 
 //    g->squares[2][0].figure = g->squares[7][3].figure;
 //    g->squares[7][3].figure = NULL;
-    g->squares[5][0].figure = g->squares[0][3].figure;
-    g->squares[0][3].figure = NULL;
+//    g->squares[5][0].figure = g->squares[0][3].figure;
+//    g->squares[0][3].figure = NULL;
+}
+
+void restart(game_stuff* g) {
+    g->game_over = false;
+    g->black_player_turn = false;
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            g->squares[i][j].figure = NULL;
+        }
+    }
+    arena_restart(&g->arena);
+    fill_squares_with_figures(g);
 }
 
 #endif //CHESS_GAME_H

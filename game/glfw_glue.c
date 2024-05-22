@@ -27,6 +27,7 @@ void glfw_init(const glfw_desc_t* desc) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     _window = glfwCreateWindow(desc_def.width, desc_def.height, desc_def.title, 0, 0);
     glfwMakeContextCurrent(_window);
@@ -35,18 +36,6 @@ void glfw_init(const glfw_desc_t* desc) {
 
 GLFWwindow* glfw_window(void) {
     return _window;
-}
-
-int glfw_width(void) {
-    int width, height;
-    glfwGetFramebufferSize(_window, &width, &height);
-    return width;
-}
-
-int glfw_height(void) {
-    int width, height;
-    glfwGetFramebufferSize(_window, &width, &height);
-    return height;
 }
 
 sg_environment glfw_environment(void) {

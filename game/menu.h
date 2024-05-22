@@ -7,9 +7,8 @@
 
 #include "gfx.h"
 #include "math.h"
-
 #include "button.h"
-
+#include "textures.h"
 
 
 sg_pipeline get_menu_pipeline();
@@ -22,6 +21,8 @@ typedef struct {
     button start_button;
     button exit_button;
     sg_pipeline menu_pipeline;
+    sg_buffer vb;
+    sg_buffer ib;
 } menu_stuff;
 
 
@@ -36,18 +37,34 @@ void menu_mouse_click_callback(menu_stuff* g, int button, int action) {
 void menu_init(menu_stuff *m) {
     m->menu_pipeline = get_menu_pipeline();
 
-    m->start_button = create_button(&(button_desc){
-        .corners = (corners) {
-            .bottom_left = (vec2){.x = -0.5f, .y = -0.125f},
-            .top_right = (vec2){.x = 0.5f, .y = 0.125f}
-        },
-        .text = "Start"
+    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc) {
+            .min_filter = SG_FILTER_NEAREST,
+            .mag_filter = SG_FILTER_NEAREST,
+    });
+
+    m->start_button = button_create(&(button_desc) {
+            .corners = (corners) {
+                    .bottom_left = (vec2) {.x = -0.3f, .y = -0.125f - 0.25f},
+                    .top_right = (vec2) {.x = 0.3f, .y = 0.125f - 0.25f}
+            },
+            .texture = get_texture("assets/start.png"),
+            .smp = smp
+    });
+
+    m->exit_button = button_create(&(button_desc) {
+            .corners = (corners) {
+                    .bottom_left = (vec2) {.x = -0.3f, .y = -0.125f - 0.6},
+                    .top_right = (vec2) {.x = 0.3f, .y = 0.125f - 0.6}
+            },
+            .texture = get_texture("assets/exit.png"),
+            .smp = smp
     });
 }
 
 void menu_frame_play(menu_stuff *m) {
     sg_apply_pipeline(m->menu_pipeline);
-    b_render(&m->start_button);
+    button_render(&m->start_button);
+    button_render(&m->exit_button);
 }
 
 sg_pipeline get_menu_pipeline() {
@@ -73,6 +90,9 @@ sg_pipeline get_menu_pipeline() {
                     {.name = "is_hovered", .type = SG_UNIFORMTYPE_INT},
                 },
             },
+            .images[0].used = true,
+            .samplers[0].used = true,
+            .image_sampler_pairs[0] = {.used = true, .glsl_name = "tex", .image_slot = 0, .sampler_slot = 0},
         }
     });
 
@@ -84,6 +104,7 @@ sg_pipeline get_menu_pipeline() {
             .attrs = {
                 {.format = SG_VERTEXFORMAT_FLOAT2},
                 {.format = SG_VERTEXFORMAT_FLOAT4},
+                {.format = SG_VERTEXFORMAT_FLOAT2},
             }
         },
         .shader = shd,

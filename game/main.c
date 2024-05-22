@@ -42,6 +42,12 @@ static void cursor_position_callback(GLFWwindow *window, double xpos, double ypo
         } else {
             m.start_button.is_hovered = false;
         }
+
+        if (b_inside_corners(&m.exit_button, window_coord_x, window_coord_y)) {
+            m.exit_button.is_hovered = true;
+        } else {
+            m.exit_button.is_hovered = false;
+        }
     }
 }
 
@@ -61,41 +67,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     }
 }
 
-char* vec3_to_json(vec3 *v) {
-    size_t needed = snprintf(NULL, 0, "{\"x\":%f,\"y\":%f,\"z\":%f}", v->x, v->y, v->z)+1;
-    char * buffer = malloc(needed);
-    sprintf(buffer, "{\"x\":%f,\"y\":%f,\"z\":%f}", v->x, v->y, v->z);
-    return buffer;
-}
-char* vec4_to_json(vec4 *v) {
-    size_t needed = snprintf(NULL, 0, "{\"x\":%f,\"y\":%f,\"z\":%f,\"r\":%f}", v->x, v->y, v->z, v->r)+1;
-    char * buffer = malloc(needed);
-    sprintf(buffer, "{\"x\":%f,\"y\":%f,\"z\":%f,\"r\":%f}", v->x, v->y, v->z, v->r);
-    return buffer;
-}
-
-char* vertex_to_json(vertex* v) {
-    char *pos = vec3_to_json(&v->position);
-    char *color = vec4_to_json(&v->color);
-
-    size_t needed = snprintf(NULL, 0, "{\"pos\":%s,\"col\":%s}", pos, color)+1;
-    char * buffer = malloc(needed);
-    sprintf(buffer, "{\"pos\":%s,\"col\":%s}", pos, color);
-
-    free(pos);
-    free(color);
-
-    return buffer;
-}
-
 int main() {
-    vertex v = (vertex){
-        .position = (vec3){.x = 1.0f, .y = 2.0f, .z = 3.0f},
-        .color = (vec4){.x = 1.0f, .y = 2.0f, .z = 3.0f, .r = 4.0f},
-    };
-    char* vertex_json = vertex_to_json(&v);
-    printf("%s\n", vertex_json);
-    free(vertex_json);
     // create GLFW window and initialize GL
     glfw_init(&(glfw_desc_t) {
         .title = "Chess-C",
