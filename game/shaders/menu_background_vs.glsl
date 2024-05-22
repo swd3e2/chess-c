@@ -1,6 +1,7 @@
 #version 330
 
-uniform int is_hovered;
+uniform vec2 uv_offset;
+uniform float time;
 
 layout(location = 0) in vec2 position;
 layout(location = 1) in vec4 color0;

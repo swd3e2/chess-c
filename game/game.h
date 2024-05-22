@@ -20,6 +20,7 @@
 #include "file.h"
 #include <time.h>
 #include "arena.h"
+#include "vertex.h"
 
 #define PAWN 0
 #define ROOK 1
@@ -41,16 +42,6 @@ typedef struct {
     vec2 position;
     sg_image image;
 } select_square;
-
-typedef struct {
-    vec3 position;
-    vec4 color;
-} vertex2;
-
-typedef struct {
-    vec2 position;
-    vec4 color;
-} line_vertex;
 
 typedef struct {
     int x;
@@ -86,7 +77,7 @@ typedef struct {
     int is_selected;
 } figures_uniform_params;
 
-vertex2** prepare_board_vertices();
+vertex** prepare_board_vertices();
 sg_pipeline get_board_pipeline();
 sg_pipeline get_figures_pipeline();
 sg_pipeline get_lines_pipeline();
@@ -123,9 +114,9 @@ void restart(game_stuff* g);
 
 void fill_squares_with_figures(game_stuff* g);
 
-void create_squares_vertex_buffers(game_stuff* g, vertex2 **vertices);
+void create_squares_vertex_buffers(game_stuff* g, vertex **vertices);
 
-void free_board_vertices(vertex2 **board_vertices);
+void free_board_vertices(vertex **board_vertices);
 
 void sq_check_possible_move(game_stuff* g, figure* f);
 
@@ -133,6 +124,7 @@ void sq_clear_possible_move(game_stuff* g) {
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
             g->squares[i][j].possible_move = false;
+            g->squares[i][j].attack_move = false;
         }
     }
 }
@@ -147,18 +139,21 @@ void game_mouse_click_callback(game_stuff* g, int button, int action) {
         return;
     }
 
-    figure *f = g->squares[g->cursor_pos.y][g->cursor_pos.x].figure;
+    chess_square *selected_sq = &g->squares[g->selected_pos.y][g->selected_pos.x];
+    chess_square *cursor_sq = &g->squares[g->cursor_pos.y][g->cursor_pos.x];
+
+    figure *f = cursor_sq->figure;
     if (f == NULL) {
         if (g->selected_figure == NULL) {
             return;
         }
 
-        if (!g->squares[g->cursor_pos.y][g->cursor_pos.x].possible_move) {
+        if (!cursor_sq->possible_move && !cursor_sq->attack_move) {
             return;
         }
 
-        g->squares[g->selected_pos.y][g->selected_pos.x].figure = NULL;
-        g->squares[g->cursor_pos.y][g->cursor_pos.x].figure = g->selected_figure;
+        selected_sq->figure = NULL;
+        cursor_sq->figure = g->selected_figure;
         g->selected_figure->is_selected = false;
         g->black_player_turn = !g->black_player_turn;
         g->selected_figure = NULL;
@@ -177,17 +172,17 @@ void game_mouse_click_callback(game_stuff* g, int button, int action) {
     }
 
     if (g->selected_figure != NULL && f->is_black != g->selected_figure->is_black) {
-        if (!g->squares[g->cursor_pos.y][g->cursor_pos.x].possible_move) {
+        if (!cursor_sq->possible_move && !cursor_sq->attack_move) {
             return;
         }
 
-        figure* figure_to_kill = g->squares[g->cursor_pos.y][g->cursor_pos.x].figure;
+        figure* figure_to_kill = cursor_sq->figure;
         if (figure_to_kill->figure_type == KING) {
             g->game_over = 1;
         }
-        printf("%d\n", figure_to_kill->figure_type);
-        g->squares[g->selected_pos.y][g->selected_pos.x].figure = NULL;
-        g->squares[g->cursor_pos.y][g->cursor_pos.x].figure = g->selected_figure;
+
+        selected_sq->figure = NULL;
+        cursor_sq->figure = g->selected_figure;
         g->selected_figure->is_selected = false;
         g->black_player_turn = !g->black_player_turn;
         g->selected_figure = NULL;
@@ -243,7 +238,12 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
                 if (!pc_is_valid(next_attack_coords)) continue;
                 chess_square* sq = &g->squares[next_attack_coords.y][next_attack_coords.x];
                 if (sq->figure == NULL || sq->figure->is_black == f->is_black) continue;
-                sq->possible_move = true;
+
+                if (sq->figure == NULL) {
+                    sq->possible_move = true;
+                } else {
+                    sq->attack_move = true;
+                }
             }
 
             // Move
@@ -267,7 +267,6 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
             for (int i = 0; i < 4; i++) {
                 position_coord current_position = cursor_pos;
 
-                bool has_found_enemy = false;
                 while(true) {
                     current_position.x += moves[i].x;
                     current_position.y += moves[i].y;
@@ -277,7 +276,7 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
                     if (sq->figure != NULL) {
                         if (sq->figure->is_black == f->is_black) break;
 
-                        sq->possible_move = true;
+                        sq->attack_move = true;
                         break;
                     }
                     sq->possible_move = true;
@@ -305,7 +304,7 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
                     if (sq->figure != NULL) {
                         if (sq->figure->is_black == f->is_black) break;
 
-                        sq->possible_move = true;
+                        sq->attack_move = true;
                         break;
                     }
                     sq->possible_move = true;
@@ -336,7 +335,7 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
                 if (sq->figure != NULL) {
                     if (sq->figure->is_black == f->is_black) continue;
 
-                    sq->possible_move = true;
+                    sq->attack_move = true;
                     continue;
                 }
                 sq->possible_move = true;
@@ -369,7 +368,7 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
                 if (sq->figure != NULL) {
                     if (sq->figure->is_black == f->is_black) continue;
 
-                    sq->possible_move = true;
+                    sq->attack_move = true;
                     continue;
                 }
                 sq->possible_move = true;
@@ -400,7 +399,7 @@ void sq_check_possible_move(game_stuff* g, figure* f) {
                     if (sq->figure != NULL) {
                         if (sq->figure->is_black == f->is_black) break;
 
-                        sq->possible_move = true;
+                        sq->attack_move = true;
                         break;
                     }
                     sq->possible_move = true;
@@ -450,30 +449,22 @@ void game_init(game_stuff *g) {
         "assets/b_queen.png",
     };
     g->textures = get_multiple_textures(figure_texture_filenames, sizeof(figure_texture_filenames) / sizeof(char*));
-    vertex2** board_vertices = prepare_board_vertices();
+    vertex** board_vertices = prepare_board_vertices();
 
     create_squares_vertex_buffers(g, board_vertices);
     free_board_vertices(board_vertices);
 
     fill_squares_with_figures(g);
 
-    float startX = 0.0f;
-    float startY = 0.0f;
-    float endX = startX + 0.20f;
-    float endY = startY + 0.20f;
-
-    float vertices[] = {
-            // pos                 color                        texcoord
-            startX, startY, -1.0f,  0.0f, 0.0f, 0.0f, 1.0f,     1.0f, 1.0f,
-            endX, startY, -1.0f,    0.0f, 0.0f, 0.0f, 1.0f,     0.0f, 1.0f,
-            endX, endY, -1.0f,      0.0f, 0.0f, 0.0f, 1.0f,     0.0f, 0.0f,
-            startX, endY, -1.0f,    0.0f, 0.0f, 0.0f, 1.0f,     1.0f, 0.0f,
-    };
-
-    g->vbuf = sg_make_buffer(&(sg_buffer_desc) {
+    vertex* vertices = vertex_create_quad(0.0f, 0.0f, 0.2f, 0.2f);
+    g->vbuf = sg_make_buffer(&(sg_buffer_desc){
             .type = SG_BUFFERTYPE_VERTEXBUFFER,
-            .data = SG_RANGE(vertices)
+            .data = {
+                    .ptr = vertices,
+                    .size = sizeof(vertex) * 4
+            }
     });
+    vertex_free_memory(vertices);
 
     // create a sampler object
     g->smp = sg_make_sampler(&(sg_sampler_desc) {
@@ -488,7 +479,7 @@ void game_init(game_stuff *g) {
     g->figures_pipeline = get_figures_pipeline();
     g->lines_pipeline = get_lines_pipeline();
 
-    line_vertex  line_vertices[] = {
+    vertex  line_vertices[] = {
             {.color = (vec4){.x = 1.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f}, .position = (vec2){.x = -1.0f, .y = -1.0f} },
             {.color = (vec4){.x = 1.0f, .y = 0.0f, .z = 0.0f, .r = 1.0f}, .position = (vec2){.x = 1.0f, .y = 1.0f} }
     };
@@ -497,22 +488,17 @@ void game_init(game_stuff *g) {
             .data = SG_RANGE(line_vertices)
     });
 
-    float startX2 = 0.0f;
-    float startY2 = 0.0f;
-    float endX2 = startX2 + 0.25f;
-    float endY2 = startY2 + 0.25f;
-    float vertices2[] = {
-            // pos                 color                  texcoord
-            startX2, startY2, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
-            endX2, startY2, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,
-            endX2, endY2, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-            startX2, endY2, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f,
-    };
 
+    vertex* vertices2 = vertex_create_quad(0.0f, 0.0f, 0.25f, 0.25f);
     g->s_square.vbuf = sg_make_buffer(&(sg_buffer_desc){
             .type = SG_BUFFERTYPE_VERTEXBUFFER,
-            .data = SG_RANGE(vertices2)
+            .data = {
+                .ptr = vertices2,
+                .size = sizeof(vertex) * 4
+            }
     });
+    vertex_free_memory(vertices2);
+
     g->s_square.ibuf = g->ibuf;
     g->s_square.image = get_texture("assets/square_possible_move.png");
 }
@@ -603,7 +589,7 @@ void game_frame_play(game_stuff* g) {
 
     // Cursor things
     chess_square * cursor_square = &g->squares[g->cursor_pos.y][g->cursor_pos.x];
-    if ((cursor_square->figure != NULL && cursor_square->figure->is_black == g->black_player_turn) || cursor_square->possible_move) {
+    if ((cursor_square->figure != NULL && cursor_square->figure->is_black == g->black_player_turn) || cursor_square->possible_move || cursor_square->attack_move) {
         params.pos_offset.x = -(1.0f - 2.0f * g->cursor_pos.x * 0.125f);
         params.pos_offset.y = -(1.0f - 2.0f * g->cursor_pos.y * 0.125f);
         sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range) {.ptr = &params,.size = sizeof(params)});
@@ -636,7 +622,7 @@ void game_frame_play(game_stuff* g) {
 //    sg_draw(0, 2, 1);
 }
 
-void free_board_vertices(vertex2 **board_vertices) {
+void free_board_vertices(vertex **board_vertices) {
     if (board_vertices == NULL) {
         return;
     }
@@ -650,14 +636,14 @@ void free_board_vertices(vertex2 **board_vertices) {
     free(board_vertices);
 }
 
-void create_squares_vertex_buffers(game_stuff* g, vertex2 **vertices) {
+void create_squares_vertex_buffers(game_stuff* g, vertex **vertices) {
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
             g->squares[i][j].vertex_buffer = sg_make_buffer(&(sg_buffer_desc) {
                     .type = SG_BUFFERTYPE_VERTEXBUFFER,
                     .data = (sg_range){
                             .ptr = vertices[i * 8 + j],
-                            .size = 4 * sizeof(vertex2)
+                            .size = 4 * sizeof(vertex)
                     }
             });
         }
@@ -696,8 +682,9 @@ sg_pipeline get_board_pipeline() {
     return sg_make_pipeline(&(sg_pipeline_desc) {
             .layout = {
                     .attrs = {
-                            {.format = SG_VERTEXFORMAT_FLOAT3},
+                            {.format = SG_VERTEXFORMAT_FLOAT2},
                             {.format = SG_VERTEXFORMAT_FLOAT4},
+                            {.format = SG_VERTEXFORMAT_FLOAT2}
                     }
             },
             .shader = shd,
@@ -723,6 +710,7 @@ sg_pipeline get_lines_pipeline() {
                     .attrs = {
                             {.format = SG_VERTEXFORMAT_FLOAT2},
                             {.format = SG_VERTEXFORMAT_FLOAT4},
+                            {.format = SG_VERTEXFORMAT_FLOAT2}
                     }
             },
             .shader = shd,
@@ -768,7 +756,7 @@ sg_pipeline get_figures_pipeline() {
     // create pipeline object
     return sg_make_pipeline(&(sg_pipeline_desc) {
             .layout = {.attrs = {
-                    [0] = {.format = SG_VERTEXFORMAT_FLOAT3},
+                    [0] = {.format = SG_VERTEXFORMAT_FLOAT2},
                     [1] = {.format = SG_VERTEXFORMAT_FLOAT4},
                     [2] = {.format = SG_VERTEXFORMAT_FLOAT2}
             }},
@@ -780,15 +768,15 @@ sg_pipeline get_figures_pipeline() {
     });
 }
 
-vertex2** prepare_board_vertices() {
-    vertex2 **vertices = malloc(64 * sizeof(vertex2*));
+vertex** prepare_board_vertices() {
+    vertex **vertices = malloc(64 * sizeof(vertex*));
     float width = 1.0f / 8;
     float height = 1.0f / 8;
 
     for (int i = 0; i < 8; i++) {
         bool isEvenRow = i % 2 > 0;
         for (int j = 0; j < 8; j++) {
-            vertices[i * 8 + j] = malloc(4 * sizeof(vertex2));
+            vertices[i * 8 + j] = malloc(4 * sizeof(vertex));
             bool isEvenColumn = j % 2 > 0;
 
             float startX = j * width * 2.0f - 1.0f;
@@ -796,10 +784,10 @@ vertex2** prepare_board_vertices() {
             float endX = startX + (width * 2);
             float endY = startY + (height * 2);
 
-            vertices[i * 8 + j][0].position = (vec3) {.x = startX, .y = startY, .z = -1.0f};
-            vertices[i * 8 + j][1].position = (vec3) {.x = endX, .y = startY, .z = -1.0f};
-            vertices[i * 8 + j][2].position = (vec3) {.x = endX, .y = endY, .z = -1.0f};
-            vertices[i * 8 + j][3].position = (vec3) {.x = startX, .y = endY, .z = -1.0f};
+            vertices[i * 8 + j][0].position = (vec2) {.x = startX, .y = startY};
+            vertices[i * 8 + j][1].position = (vec2) {.x = endX, .y = startY};
+            vertices[i * 8 + j][2].position = (vec2) {.x = endX, .y = endY};
+            vertices[i * 8 + j][3].position = (vec2) {.x = startX, .y = endY};
 
             vec4 color = COLOR_SQUARE_WHITE;
             if ((isEvenRow && isEvenColumn) || !isEvenRow && !isEvenColumn) {
